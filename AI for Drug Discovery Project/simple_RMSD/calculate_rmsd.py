@@ -146,7 +146,32 @@ def main():
     category_order = ["<=2 Å", "2-3 Å", "3-4 Å", "4-5 Å", ">5 Å"]
     for category in sorted(category_counts.keys(), key=lambda x: category_order.index(x) if x in category_order else len(category_order)):
         print(f"  {category}: {category_counts[category]}")
-    
+
+    # Generate an all-vs-all CSV where each block is comparisons to a single target frame
+    def generate_all_vs_all(frames, out_path):
+        out_path = Path(out_path)
+        print(f"\nGenerating all-vs-all RMSD CSV: {out_path}")
+        with open(out_path, 'w') as f:
+            f.write("TargetFrame,Frame,RMSD,Category\n")
+            for t_idx, t_frame in enumerate(frames, 1):
+                # Optional comment line to mark blocks for human readers
+                f.write(f"# TargetFrame {t_idx}\n")
+                # Per-target category counts
+                per_cat = {}
+                for i_idx, frame in enumerate(frames, 1):
+                    rmsd = calculate_rmsd(frame, t_frame)
+                    category = get_rmsd_category(rmsd)
+                    f.write(f"{t_idx},{i_idx},{rmsd:.6f},{category}\n")
+                    per_cat[category] = per_cat.get(category, 0) + 1
+                # Blank line to separate blocks
+                f.write("\n")
+                # Also print a small summary to console
+                print(f"TargetFrame {t_idx}: ", end='')
+                print(", ".join([f"{c}: {per_cat.get(c,0)}" for c in category_order]))
+
+    all_vs_all_csv = Path(__file__).parent / "rmsd_all_vs_all.csv"
+    generate_all_vs_all(frames, all_vs_all_csv)
+
     print("\nDone!")
 
 if __name__ == "__main__":
