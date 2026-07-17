@@ -13,7 +13,11 @@ Core logic implemented here:
 3. Build a true RMSD threshold graph (edges from matrix values <= threshold).
 4. Connect representative nodes to each other to keep class progression visible.
 """
-
+#### Disclaimer: Generative AI was used to assist in 
+# writing this code. 
+# The author has reviewed and 
+# edited the content as needed and 
+# takes full responsibility for the final code.
 from __future__ import annotations
 
 from pathlib import Path
@@ -123,6 +127,35 @@ def classes_to_table(classes: List[Dict[str, Any]]) -> pd.DataFrame:
         )
 
     return pd.DataFrame(rows)
+
+
+def save_class_table_png(
+    class_table: pd.DataFrame,
+    output_path: Path,
+    title: str = "Covering Class Table",
+) -> None:
+    """Render a class summary dataframe to a PNG image."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig_height = max(6.0, 0.35 * (len(class_table) + 2))
+    fig, ax = plt.subplots(figsize=(20, fig_height))
+    ax.axis("off")
+    ax.set_title(title, fontsize=14, pad=14)
+
+    table = ax.table(
+        cellText=class_table.values,
+        colLabels=class_table.columns,
+        loc="center",
+        cellLoc="left",
+        colLoc="left",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(8)
+    table.scale(1, 1.35)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=240, bbox_inches="tight")
+    plt.close(fig)
 
 
 def build_class_edge_map(
