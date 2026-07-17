@@ -1,5 +1,23 @@
 """Covering algorithm for frame clustering from an RMSD all-vs-all matrix.
 
+PowerShell usage (hypothetical examples for any institution):
+
+1) Basic run (outputs are written beside the input CSV):
+    python .\\Covering_Algorithm_Run1_7-16-26_cleaned.py --input-csv "D:\\Project\\rmsd_matrix.csv"
+
+2) Custom output folder and threshold:
+    python .\\Covering_Algorithm_Run1_7-16-26_cleaned.py --input-csv "D:\\Project\\rmsd_matrix.csv" --output-dir "D:\\Project\\outputs" --threshold 2.5
+
+3) Limit analysis to first N frames:
+    python .\\Covering_Algorithm_Run1_7-16-26_cleaned.py --input-csv "D:\\Project\\rmsd_matrix.csv" --max-frames 500
+
+4) Custom output filenames:
+    python .\\Covering_Algorithm_Run1_7-16-26_cleaned.py --input-csv "D:\\Project\\rmsd_matrix.csv" --class1-members-name "team_class1_members.csv" --class1-matrix-name "team_class1_matrix.csv" --unclassified-matrix-name "team_unclassified_matrix.csv"
+
+Important path note:
+    If another team clones/downloads this repository, their local paths will differ.
+    Replace all example paths with machine-specific paths before running commands.
+
 This module is intentionally side-effect free:
 - it does not write PNG/CSV outputs on import or function calls,
 - it builds clean in-memory objects you can inspect or plot later.
@@ -20,6 +38,7 @@ Core logic implemented here:
 # takes full responsibility for the final code.
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
@@ -29,6 +48,8 @@ import numpy as np
 import pandas as pd
 
 
+# These defaults are kept for convenience and backward compatibility.
+# Cross-institution users should pass --input-csv and --output-dir explicitly.
 DEFAULT_INPUT = Path(
     r"G:\.shortcut-targets-by-id\1cfLzEn1DaVCZwnrRp5mQucGbPypmGqBN\AI Drug Discovery for Cancer\MD simulations\Retuns_081424\Apo-A\Run1\frames_1k\csv\rmsd_matrix_v2_all_vs_all_biopython.csv"
 )
@@ -38,7 +59,17 @@ DEFAULT_OUTPUT_DIR = Path(
 
 
 def load_frames_matrix(csv_path: Path, max_frames: int | None = None) -> pd.DataFrame:
-    """Load RMSD matrix and relabel both axes to integer frame IDs."""
+    """Load RMSD matrix and relabel both axes to integer frame IDs.
+
+    Expected input shape:
+    - Square RMSD matrix CSV with frame labels in first column and header row.
+    - Values represent pairwise RMSD distances between frames.
+
+    Normalization performed here:
+    - Row/column labels are reset to 1..N integer frame IDs so downstream logic
+      is deterministic across differently labeled source CSV files.
+    - Optional truncation keeps top-left NxN block for max_frames experiments.
+    """
     matrix = pd.read_csv(csv_path, index_col=0)
     n_cols = matrix.shape[1]
     matrix.columns = list(range(1, n_cols + 1))
@@ -63,6 +94,13 @@ def build_classes_recursive(
 
     `blocked_representatives` contains row IDs that appeared in earlier classes.
     A next representative cannot be in that set.
+
+    Recursive process overview:
+    1) Choose valid representative (or recover to smallest available row).
+    2) Select all currently remaining rows within threshold of representative.
+    3) Record class metadata.
+    4) Remove class members from remaining pool.
+    5) Recurse until no rows remain.
     """
     if not remaining_rows:
         return []
@@ -338,13 +376,16 @@ def export_class1_and_unclassified_csvs(
     - class1_rmsd_matrix.csv: RMSD submatrix restricted to Class 1 members.
     - unclassified_rmsd_matrix.csv: RMSD submatrix for frames not in Class 1.
     """
+    # Ensure the destination exists before writing any CSV artifacts.
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Locate Class_1 exactly; if missing, produce empty CSV outputs safely.
     class1_info = next((c for c in classes if str(c.get("class_name")) == "Class_1"), None)
     class1_members: List[int] = []
     if class1_info is not None:
         class1_members = sorted(int(x) for x in class1_info.get("members", []))
 
+    # Unclassified is defined here as: all frames not belonging to Class_1.
     all_frames = [int(x) for x in frames.index.tolist()]
     class1_set = set(class1_members)
     unclassified_members = [x for x in all_frames if x not in class1_set]
@@ -382,7 +423,11 @@ def run_and_export_class1_outputs(
     threshold: float = 2.5,
     max_frames: int | None = None,
 ) -> Dict[str, Any]:
-    """Run covering algorithm, then export requested Class 1/unclassified CSV outputs."""
+    """Run covering algorithm, then export requested Class 1/unclassified CSV outputs.
+
+    This function is the main programmatic entry point for automation pipelines.
+    It returns both in-memory analysis objects and concrete output file paths.
+    """
     result = run_covering_algorithm(
         input_csv=input_csv,
         threshold=threshold,
@@ -395,6 +440,105 @@ def run_and_export_class1_outputs(
     )
     result["exports"] = exports
     return result
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments for portable cross-team execution.
+
+    Design choices:
+    - --input-csv is required to force explicit user intent.
+    - --output-dir is optional; defaults to input CSV parent folder.
+    - Output filenames are overridable to support lab-specific naming standards.
+    """
+    parser = argparse.ArgumentParser(
+        description="Run covering algorithm and export Class 1 / unclassified RMSD CSV outputs.",
+        epilog=(
+            "Examples:\n"
+            "  python Covering_Algorithm_Run1_7-16-26_cleaned.py --input-csv D:/Project/rmsd_matrix.csv\n"
+            "  python Covering_Algorithm_Run1_7-16-26_cleaned.py --input-csv D:/Project/rmsd_matrix.csv --output-dir D:/Project/outputs --threshold 2.5"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--input-csv",
+        type=Path,
+        required=True,
+        help="Path to all-vs-all RMSD matrix CSV.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Output directory for generated CSV files (defaults to input CSV directory).",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=2.5,
+        help="RMSD threshold used by the covering algorithm.",
+    )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=None,
+        help="Optional cap: only analyze first N frames from the matrix.",
+    )
+    parser.add_argument(
+        "--class1-members-name",
+        type=str,
+        default="class1_members.csv",
+        help="Output filename for Class 1 member listing.",
+    )
+    parser.add_argument(
+        "--class1-matrix-name",
+        type=str,
+        default="class1_rmsd_matrix.csv",
+        help="Output filename for Class 1 RMSD matrix.",
+    )
+    parser.add_argument(
+        "--unclassified-matrix-name",
+        type=str,
+        default="unclassified_rmsd_matrix.csv",
+        help="Output filename for unclassified RMSD matrix.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    """CLI orchestration entry point.
+
+    Workflow:
+    1) Parse CLI values.
+    2) Resolve and validate paths.
+    3) Run covering analysis.
+    4) Export requested CSV artifacts.
+    5) Print artifact paths for reproducible audit/logging.
+    """
+    args = parse_cli_args()
+
+    input_csv = args.input_csv.expanduser()
+    if not input_csv.exists():
+        raise FileNotFoundError(f"Input CSV not found: {input_csv}")
+
+    output_dir = args.output_dir.expanduser() if args.output_dir else input_csv.parent
+
+    result = run_covering_algorithm(
+        input_csv=input_csv,
+        threshold=float(args.threshold),
+        max_frames=args.max_frames,
+    )
+    exports = export_class1_and_unclassified_csvs(
+        frames=result["frames"],
+        classes=result["classes"],
+        output_dir=output_dir,
+        class1_members_name=args.class1_members_name,
+        class1_matrix_name=args.class1_matrix_name,
+        unclassified_matrix_name=args.unclassified_matrix_name,
+    )
+
+    print("Generated CSV outputs:")
+    for name, path in exports.items():
+        print(f" - {name}: {path}")
 
 
 def plot_class_cluster_graph(
@@ -543,5 +687,5 @@ def plot_class_cluster_graph(
     plt.close(fig)
 
 
-# Intentionally no main() execution block here.
-# This file is meant for side-by-side review and in-memory debugging.
+if __name__ == "__main__":
+    main()
