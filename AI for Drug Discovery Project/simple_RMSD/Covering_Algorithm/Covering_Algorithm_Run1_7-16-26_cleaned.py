@@ -33,7 +33,7 @@ DEFAULT_INPUT = Path(
     r"G:\.shortcut-targets-by-id\1cfLzEn1DaVCZwnrRp5mQucGbPypmGqBN\AI Drug Discovery for Cancer\MD simulations\Retuns_081424\Apo-A\Run1\frames_1k\csv\rmsd_matrix_v2_all_vs_all_biopython.csv"
 )
 DEFAULT_OUTPUT_DIR = Path(
-    r"G:\.shortcut-targets-by-id\1cfLzEn1DaVCZwnrRp5mQucGbPypmGqBN\AI Drug Discovery for Cancer\MD simulations\Retuns_081424\Apo-A\Run1\frames_1k"
+    r"G:\.shortcut-targets-by-id\1cfLzEn1DaVCZwnrRp5mQucGbPypmGqBN\AI Drug Discovery for Cancer\MD simulations\Retuns_081424\Apo-A\Run1\frames_1k\csv"
 )
 
 
@@ -300,10 +300,18 @@ def run_covering_algorithm(
         representative=start_rep,
     )
 
-    class_table = classes_to_table(classes)
-    graph = build_threshold_graph(frames, classes, threshold=float(threshold), connect_representatives=True)
-    class_edges = build_class_edge_map(frames, classes, threshold=float(threshold))
-    display = build_display_metadata(frames, classes, class_edges)
+    # TABLE OUTPUT BLOCK DISABLED FOR NOW (kept for later use):
+    # class_table = classes_to_table(classes)
+
+    # GRAPH/PLOT OUTPUT BLOCK DISABLED FOR NOW (kept for later use):
+    # graph = build_threshold_graph(frames, classes, threshold=float(threshold), connect_representatives=True)
+    # class_edges = build_class_edge_map(frames, classes, threshold=float(threshold))
+    # display = build_display_metadata(frames, classes, class_edges)
+
+    class_table = None
+    graph = None
+    class_edges = None
+    display = None
 
     return {
         "frames": frames,
@@ -313,6 +321,80 @@ def run_covering_algorithm(
         "class_edges": class_edges,
         "display": display,
     }
+
+
+def export_class1_and_unclassified_csvs(
+    frames: pd.DataFrame,
+    classes: List[Dict[str, Any]],
+    output_dir: Path,
+    class1_members_name: str = "class1_members.csv",
+    class1_matrix_name: str = "class1_rmsd_matrix.csv",
+    unclassified_matrix_name: str = "unclassified_rmsd_matrix.csv",
+) -> Dict[str, Path]:
+    """Export Class 1 membership + Class 1 and unclassified RMSD submatrices.
+
+    Outputs:
+    - class1_members.csv: one row per Class 1 member frame ID.
+    - class1_rmsd_matrix.csv: RMSD submatrix restricted to Class 1 members.
+    - unclassified_rmsd_matrix.csv: RMSD submatrix for frames not in Class 1.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    class1_info = next((c for c in classes if str(c.get("class_name")) == "Class_1"), None)
+    class1_members: List[int] = []
+    if class1_info is not None:
+        class1_members = sorted(int(x) for x in class1_info.get("members", []))
+
+    all_frames = [int(x) for x in frames.index.tolist()]
+    class1_set = set(class1_members)
+    unclassified_members = [x for x in all_frames if x not in class1_set]
+
+    class1_members_path = output_dir / class1_members_name
+    class1_matrix_path = output_dir / class1_matrix_name
+    unclassified_matrix_path = output_dir / unclassified_matrix_name
+
+    # 1) Flat listing of Class 1 members.
+    class1_members_df = pd.DataFrame({"Frame": class1_members})
+    class1_members_df.to_csv(class1_members_path, index=False)
+
+    # 2) Class 1 RMSD matrix.
+    class1_matrix = frames.loc[class1_members, class1_members] if class1_members else pd.DataFrame()
+    class1_matrix.to_csv(class1_matrix_path)
+
+    # 3) Unclassified RMSD matrix (not in Class 1).
+    unclassified_matrix = (
+        frames.loc[unclassified_members, unclassified_members]
+        if unclassified_members
+        else pd.DataFrame()
+    )
+    unclassified_matrix.to_csv(unclassified_matrix_path)
+
+    return {
+        "class1_members_csv": class1_members_path,
+        "class1_matrix_csv": class1_matrix_path,
+        "unclassified_matrix_csv": unclassified_matrix_path,
+    }
+
+
+def run_and_export_class1_outputs(
+    input_csv: Path = DEFAULT_INPUT,
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    threshold: float = 2.5,
+    max_frames: int | None = None,
+) -> Dict[str, Any]:
+    """Run covering algorithm, then export requested Class 1/unclassified CSV outputs."""
+    result = run_covering_algorithm(
+        input_csv=input_csv,
+        threshold=threshold,
+        max_frames=max_frames,
+    )
+    exports = export_class1_and_unclassified_csvs(
+        frames=result["frames"],
+        classes=result["classes"],
+        output_dir=output_dir,
+    )
+    result["exports"] = exports
+    return result
 
 
 def plot_class_cluster_graph(
