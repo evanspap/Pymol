@@ -18,9 +18,7 @@ Important path note:
     If another team clones/downloads this repository, their local paths will differ.
     Replace all example paths with machine-specific paths before running commands.
 
-This module is intentionally side-effect free:
-- it does not write PNG/CSV outputs on import or function calls,
-- it builds clean in-memory objects you can inspect or plot later.
+This module is intentionally side-effect free: it builds clean in-memory objects you can inspect or plot later.
 
 Core logic implemented here:
 1. Load RMSD matrix and relabel rows/columns to integer frame IDs (1..N).
@@ -70,12 +68,22 @@ def load_frames_matrix(csv_path: Path, max_frames: int | None = None) -> pd.Data
       is deterministic across differently labeled source CSV files.
     - Optional truncation keeps top-left NxN block for max_frames experiments.
     """
+    # Read the CSV into a DataFrame.
+    # `index_col=0` means the first column in the CSV becomes the row index.
     matrix = pd.read_csv(csv_path, index_col=0)
+
+    # Count how many columns exist. For a valid all-vs-all matrix, this should
+    # match the number of rows (square matrix), but we do not hard-fail here.
     n_cols = matrix.shape[1]
+
+    # Standardize labels to 1..N for BOTH columns and rows.
+    # This avoids dependence on any original frame naming style.
     matrix.columns = list(range(1, n_cols + 1))
     matrix.index = list(range(1, matrix.shape[0] + 1))
 
     if max_frames is not None:
+        # Keep only the top-left NxN section when running a smaller test.
+        # Example: if max_frames=500, keep rows/columns 1..500.
         keep = list(range(1, min(max_frames, n_cols) + 1))
         matrix = matrix.loc[keep, keep]
 
@@ -103,16 +111,23 @@ def build_classes_recursive(
     5) Recurse until no rows remain.
     """
     if not remaining_rows:
+        # Base case: no frames left to classify.
         return []
 
     if representative not in remaining_rows or representative in blocked_representatives:
+        # If representative is invalid (already removed or blocked), choose a new one.
+        # Preferred choice: smallest remaining frame not blocked.
         available = sorted(remaining_rows - blocked_representatives)
         if not available:
             # Fallback: if all remaining rows are blocked, continue with smallest remaining.
             available = sorted(remaining_rows)
         representative = available[0]
 
+    # Work on a sorted list so behavior is deterministic and reproducible.
     current_rows = sorted(remaining_rows)
+
+    # Core class rule: frame belongs to current class if its RMSD to the
+    # representative frame is <= threshold.
     eligible_mask = frames.loc[current_rows, representative] <= threshold
     class_members = [row for row, keep in zip(current_rows, eligible_mask) if bool(keep)]
 
@@ -128,17 +143,24 @@ def build_classes_recursive(
         "member_count": len(class_members),
     }
 
+    # Remove everything assigned to this class from the remaining pool.
     new_remaining = set(remaining_rows) - set(class_members)
+
+    # Block all class members from becoming future representatives.
     new_blocked = set(blocked_representatives) | set(class_members)
     if not new_remaining:
+        # No unassigned frames left: recursion ends here.
         return [class_info]
 
+    # Pick the next representative, preferring one not blocked.
     candidate_next = sorted(new_remaining - new_blocked)
     if candidate_next:
         next_representative = candidate_next[0]
     else:
+        # Emergency fallback if every remaining frame is blocked.
         next_representative = min(new_remaining)
 
+    # Recursive step: build later classes and append to current class.
     return [class_info] + build_classes_recursive(
         frames=frames,
         threshold=threshold,
@@ -153,6 +175,7 @@ def classes_to_table(classes: List[Dict[str, Any]]) -> pd.DataFrame:
     """Return class summary as a dataframe (for display/export elsewhere)."""
     rows = []
     for info in classes:
+        # Convert member list to a human-readable comma-separated string.
         members = list(info["members"])
         members_text = ", ".join(str(x) for x in members)
         rows.append(
@@ -173,8 +196,10 @@ def save_class_table_png(
     title: str = "Covering Class Table",
 ) -> None:
     """Render a class summary dataframe to a PNG image."""
+    # Create output directory if needed.
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Dynamically scale figure height by number of classes to avoid clipping.
     fig_height = max(6.0, 0.35 * (len(class_table) + 2))
     fig, ax = plt.subplots(figsize=(20, fig_height))
     ax.axis("off")
@@ -187,6 +212,7 @@ def save_class_table_png(
         cellLoc="left",
         colLoc="left",
     )
+    # Tune typography so larger tables remain legible.
     table.auto_set_font_size(False)
     table.set_fontsize(8)
     table.scale(1, 1.35)
@@ -208,6 +234,7 @@ def build_class_edge_map(
     """
     class_edges: Dict[str, List[Tuple[int, int, float]]] = {}
     for info in classes:
+        # One edge list per class.
         class_name = str(info["class_name"])
         rep = int(info["representative"])
         members = [int(x) for x in info["members"]]
@@ -215,9 +242,11 @@ def build_class_edge_map(
 
         for node in members:
             if node == rep:
+                # Skip self-edge representative -> representative.
                 continue
             rmsd = float(frames.loc[rep, node])
             if rmsd <= threshold:
+                # Keep only edges that satisfy the threshold criterion.
                 edges.append((rep, node, rmsd))
 
         class_edges[class_name] = edges
@@ -236,6 +265,7 @@ def build_display_metadata(
     - All cluster edges carry angstrom labels.
     - Representative-to-representative links are also included.
     """
+    # Start with default visual settings for all frames.
     node_sizes: Dict[int, int] = {int(node): 90 for node in frames.index.tolist()}
     node_labels: Dict[int, str] = {int(node): f"F{int(node)}" for node in frames.index.tolist()}
     edge_labels: Dict[Tuple[int, int], str] = {}
@@ -246,12 +276,14 @@ def build_display_metadata(
         rep = int(info["representative"])
         representative_nodes.append(rep)
 
+        # Representatives are emphasized with larger size + richer label.
         node_sizes[rep] = 420
         node_labels[rep] = f"F{rep}\n{class_name}"
 
         for u, v, w in class_edges[class_name]:
             edge_labels[(u, v)] = f"{w:.2f} Å"
 
+    # Also prepare a chain linking class representatives in order.
     representative_links: List[Tuple[int, int, str]] = []
     if len(representative_nodes) > 1:
         for a, b in zip(representative_nodes[:-1], representative_nodes[1:]):
@@ -279,6 +311,7 @@ def build_threshold_graph(
     - Class and representative metadata are added to nodes.
     - Optional representative-to-representative chain edges are added.
     """
+    # Undirected graph: RMSD(i,j) equals RMSD(j,i), so one edge is enough.
     graph = nx.Graph()
 
     # Add nodes with default metadata.
@@ -288,6 +321,7 @@ def build_threshold_graph(
     # RMSD threshold edges from the matrix itself.
     idx = frames.index.tolist()
     for i, a in enumerate(idx):
+        # Only visit upper triangle (j > i) to avoid duplicate edges.
         for b in idx[i + 1 :]:
             w = float(frames.loc[a, b])
             if w <= threshold:
@@ -306,6 +340,7 @@ def build_threshold_graph(
                 graph.nodes[n]["representative"] = True
 
     if connect_representatives and len(reps) > 1:
+        # Draw progression link between representative of Class_k and Class_{k+1}.
         for a, b in zip(reps[:-1], reps[1:]):
             graph.add_edge(a, b, weight=0.0, edge_type="rep_link", label="rep_link")
 
@@ -325,10 +360,16 @@ def run_covering_algorithm(
       - class_table: pandas dataframe summary
       - graph: networkx graph with threshold and representative edges
     """
+    # 1) Load and standardize RMSD matrix labels.
     frames = load_frames_matrix(input_csv, max_frames=max_frames)
+
+    # 2) Determine all frame IDs currently under consideration.
     all_rows = set(int(x) for x in frames.index.tolist())
+
+    # 3) Start representative defaults to frame 1 when available.
     start_rep = 1 if 1 in all_rows else min(all_rows)
 
+    # 4) Build classes recursively according to threshold rule.
     classes = build_classes_recursive(
         frames=frames,
         threshold=float(threshold),
@@ -346,6 +387,7 @@ def run_covering_algorithm(
     # class_edges = build_class_edge_map(frames, classes, threshold=float(threshold))
     # display = build_display_metadata(frames, classes, class_edges)
 
+    # Keep return contract stable while optional outputs are disabled.
     class_table = None
     graph = None
     class_edges = None
@@ -390,6 +432,7 @@ def export_class1_and_unclassified_csvs(
     class1_set = set(class1_members)
     unclassified_members = [x for x in all_frames if x not in class1_set]
 
+    # Resolve all file destinations once, then write each artifact.
     class1_members_path = output_dir / class1_members_name
     class1_matrix_path = output_dir / class1_matrix_name
     unclassified_matrix_path = output_dir / unclassified_matrix_name
@@ -399,10 +442,12 @@ def export_class1_and_unclassified_csvs(
     class1_members_df.to_csv(class1_members_path, index=False)
 
     # 2) Class 1 RMSD matrix.
+    # Matrix slicing keeps only rows+columns corresponding to Class 1 frames.
     class1_matrix = frames.loc[class1_members, class1_members] if class1_members else pd.DataFrame()
     class1_matrix.to_csv(class1_matrix_path)
 
     # 3) Unclassified RMSD matrix (not in Class 1).
+    # Same operation for everything that was not in Class 1.
     unclassified_matrix = (
         frames.loc[unclassified_members, unclassified_members]
         if unclassified_members
@@ -428,11 +473,13 @@ def run_and_export_class1_outputs(
     This function is the main programmatic entry point for automation pipelines.
     It returns both in-memory analysis objects and concrete output file paths.
     """
+    # Run analysis first.
     result = run_covering_algorithm(
         input_csv=input_csv,
         threshold=threshold,
         max_frames=max_frames,
     )
+    # Then materialize on-disk CSV outputs from that in-memory result.
     exports = export_class1_and_unclassified_csvs(
         frames=result["frames"],
         classes=result["classes"],
@@ -450,6 +497,7 @@ def parse_cli_args() -> argparse.Namespace:
     - --output-dir is optional; defaults to input CSV parent folder.
     - Output filenames are overridable to support lab-specific naming standards.
     """
+    # CLI parser defines user-facing contract for command-line execution.
     parser = argparse.ArgumentParser(
         description="Run covering algorithm and export Class 1 / unclassified RMSD CSV outputs.",
         epilog=(
@@ -514,19 +562,25 @@ def main() -> None:
     4) Export requested CSV artifacts.
     5) Print artifact paths for reproducible audit/logging.
     """
+    # Read all command-line values.
     args = parse_cli_args()
 
+    # Expand potential ~ in paths and validate input file existence.
     input_csv = args.input_csv.expanduser()
     if not input_csv.exists():
         raise FileNotFoundError(f"Input CSV not found: {input_csv}")
 
+    # If output folder is omitted, write outputs beside input CSV.
     output_dir = args.output_dir.expanduser() if args.output_dir else input_csv.parent
 
+    # Execute the class-building algorithm.
     result = run_covering_algorithm(
         input_csv=input_csv,
         threshold=float(args.threshold),
         max_frames=args.max_frames,
     )
+
+    # Export requested CSV files using names provided by CLI flags.
     exports = export_class1_and_unclassified_csvs(
         frames=result["frames"],
         classes=result["classes"],
@@ -536,6 +590,7 @@ def main() -> None:
         unclassified_matrix_name=args.unclassified_matrix_name,
     )
 
+    # Print all output paths so user can confirm where files were written.
     print("Generated CSV outputs:")
     for name, path in exports.items():
         print(f" - {name}: {path}")
@@ -555,13 +610,16 @@ def plot_class_cluster_graph(
     - Edges from representative to members are labeled with angstrom distances.
     - Representative-to-representative links are drawn as dashed connectors.
     """
+    # Pull precomputed objects from result dictionary.
     frames: pd.DataFrame = result["frames"]
     classes: List[Dict[str, Any]] = result["classes"]
     graph: nx.Graph = result["graph"]
     class_edges: Dict[str, List[Tuple[int, int, float]]] = result["class_edges"]
 
+    # Ensure destination folder exists.
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # `positions` will store explicit 2D coordinates for every node.
     positions: Dict[int, Tuple[float, float]] = {}
     num_classes = max(1, len(classes))
     outer_radius = max(18.0, 3.5 * num_classes)
@@ -570,11 +628,13 @@ def plot_class_cluster_graph(
         rep = int(info["representative"])
         members = [int(x) for x in info["members"]]
 
+        # Place each class center around a large circle to reduce overlap.
         angle = 2.0 * np.pi * (idx / num_classes)
         center_x = outer_radius * np.cos(angle)
         center_y = outer_radius * np.sin(angle)
         positions[rep] = (center_x, center_y)
 
+        # Place non-representative members around that center in a small ring.
         other_members = [m for m in members if m != rep]
         ring_radius = 2.1 + 0.02 * len(other_members)
         for j, node in enumerate(other_members):
@@ -588,6 +648,7 @@ def plot_class_cluster_graph(
     for node in frames.index.tolist():
         positions.setdefault(int(node), (0.0, 0.0))
 
+    # Build a large figure because dense graphs become unreadable quickly.
     fig, ax = plt.subplots(figsize=(20, 14))
     ax.set_axis_off()
 
@@ -609,6 +670,7 @@ def plot_class_cluster_graph(
         ax.add_patch(circle)
 
     # Draw per-class representative-to-member edges with RMSD labels.
+    # Keep edge labels in a dictionary so we can draw them all at once.
     edge_label_map: Dict[Tuple[int, int], str] = {}
     for idx, info in enumerate(classes):
         class_name = str(info["class_name"])
@@ -645,6 +707,7 @@ def plot_class_cluster_graph(
             edge_label_map[(u, v)] = "rep link"
 
     # Draw nodes, making representatives larger.
+    # Choose size and color per node based on representative status.
     node_sizes = []
     node_colors = []
     for node in graph.nodes():
