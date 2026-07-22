@@ -1,8 +1,19 @@
 """Standalone RMSD calculation utilities extracted from the per-frame workflow.
-### Version 1.0 (Subject to Updates and Change)
+### Version 1.1 (Subject to Updates and Change)
 ## Author(s): Yagna Devarakonda, Research Volunteer/Assistant, Stony Brook University, NY, USA
 ## Dr. Evangelos Papadopoulos, Professor, Dana-Farber Cancer Institute
-## Date: 7-19-26
+## Date: 7-21-26
+
+This file is the barebones/simple RMSD tool.
+Use it when you want one RMSD number in the terminal for one pair of frames.
+
+It is intentionally minimal:
+- No CSV output
+- No matrix output
+- No plotting
+
+If you want tables or matrices, use:
+    RMSD_per_frame_biopython_7-21-26.py
 
 **DISCLAIMER**
 =============
@@ -12,10 +23,88 @@ if necessary. The authors are not responsible for any errors or issues that
 may arise from using this code which originate from team specific
 modifications, dependencies, or other factors outside the authors' control.**
 
+PowerShell usage (generic copy/paste):
+
+Option A: run from the folder containing this script
+    python .\RMSD_calculation_function_7-19-26.py --input "<path-to-your-pdb-file>" --frame-a 5 --frame-b 12
+
+Option B: run from anywhere using full script path
+    python "<path-to-this-script>\RMSD_calculation_function_7-19-26.py" --input "<path-to-your-pdb-file>" --frame-a 5 --frame-b 12
+
+Command-order convention used below (for clarity):
+    1) frame-a first
+    2) frame-b second
+
+In other words, write:
+    --frame-a ... --frame-b ...
+
+Sample commands:
+    # Default atom scope (full atoms)
+    python .\RMSD_calculation_function_7-19-26.py --input "<path-to-your-pdb-file>" --frame-a 5 --frame-b 12
+
+    # Backbone-only comparison
+    # Uses only N, CA, C, O, OXT (when present) and ignores side-chain atoms.
+    python .\RMSD_calculation_function_7-19-26.py --input "<path-to-your-pdb-file>" --frame-a 5 --frame-b 12 --atom-scope backbone
+
+    # Custom atom set (overrides --atom-scope)
+    python .\RMSD_calculation_function_7-19-26.py --input "<path-to-your-pdb-file>" --frame-a 5 --frame-b 12 --atoms CA,CB,N
+
+Scenario 1: quick 1v1 comparison with full atoms
+    python .\RMSD_calculation_function_7-19-26.py --input "<path-to-your-pdb-file>" --frame-a 1 --frame-b 2
+
+Scenario 2: same frame pair, backbone only
+    python .\RMSD_calculation_function_7-19-26.py --input "<path-to-your-pdb-file>" --frame-a 1 --frame-b 2 --atom-scope backbone
+
+Scenario 3: compare a custom reference frame to a later frame
+    python .\RMSD_calculation_function_7-19-26.py --input "<path-to-your-pdb-file>" --frame-a 10 --frame-b 100
+
+Scenario 4: compare using a custom atom subset
+    python .\RMSD_calculation_function_7-19-26.py --input "<path-to-your-pdb-file>" --frame-a 10 --frame-b 100 --atoms CA,CB,N
+
+What each argument means:
+- --input
+    Path to your multi-frame PDB file.
+- --frame-a
+    First frame number (1-based).
+- --frame-b
+    Second frame number (1-based).
+- --atom-scope
+    Choose "full" or "backbone".
+- --atoms
+    Comma-separated explicit atom names. If provided, this overrides --atom-scope.
+
+What "backbone-only comparison" means in this file:
+- Only backbone atoms are used: N, CA, C, O, OXT.
+- Side-chain atoms are excluded.
+- Useful when you want global fold/motion signal with less side-chain noise.
+
+Mathematical formula used in this file:
+- Let N be the number of aligned atoms.
+- Let r_i and s_i be 3D coordinates of atom i in frame A and frame B.
+- RMSD is computed as:
+    RMSD = sqrt((1/N) * sum_{i=1..N} ||r_i - s_i||^2)
+- In implementation terms:
+    diff = coords1 - coords2
+    msd = mean(sum(diff**2, axis=1))
+    rmsd = sqrt(msd)
+
+Output behavior:
+- This file prints one line in the terminal:
+    RMSD_Angstrom(frame X vs frame Y): <value>
+- It does not create a CSV.
+- It does not write files unless you manually redirect output in PowerShell.
+
+Beginner checklist:
+- Confirm the input PDB file exists.
+- Confirm frame IDs are within the valid frame range for your file.
+- Use quotes around paths with spaces.
+- If Python is not found on Windows, run using your explicit interpreter path.
+
 What this file contains:
 - The direct RMSD formula implementation.
 - Alignment helper to keep atom ordering consistent.
 - Series helper to compute RMSD for many frames against one reference.
+- A lightweight CLI for single-value RMSD output.
 """
 
 from __future__ import annotations
