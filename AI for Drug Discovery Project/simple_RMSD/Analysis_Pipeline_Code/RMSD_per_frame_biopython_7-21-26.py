@@ -31,6 +31,20 @@ In other words, when both are used, write:
 or
     --reference-frames ... --targets ...
 
+Very important output rule:
+    --reference-frame + --targets
+        = simple target-vs-reference list CSV
+        = columns: Frame, RMSD_Angstrom
+
+    --reference-frames + --targets
+        = reference-target matrix CSV
+        = reference frames on rows (vertical axis)
+        = target frames on columns (horizontal axis)
+
+If you want Excel-style row/column orientation, always use:
+    --reference-frames ... --targets ...
+even if you only have one reference frame.
+
 Option A: Run from the folder that contains this script
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
 
@@ -47,10 +61,12 @@ Sample commands:
     # fold/motion trends with less side-chain noise.
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --atom-scope backbone
 
-    # Use a custom reference and explicit target frames (reference first, targets second)
+    # Use a custom reference and explicit target frames.
+    # This creates a simple list CSV, not a matrix.
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 5 --targets 12,48
 
-    # 1vN example (reference 1 vs targets 2,4,5,9)
+    # 1vN example (reference 1 vs targets 2,4,5,9).
+    # This is still simple list output, not matrix output.
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 2,4,5,9
 
     # Use explicit targets plus specific atoms (reference first, targets second)
@@ -68,12 +84,15 @@ Scenario 2: Backbone-only RMSD relative to the first frame
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --atom-scope backbone
 
 Scenario 3: Compare a reference frame against a target range
+    # Output type: simple list CSV
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 10-25
 
 Scenario 4: Compare a reference frame against specific target frame numbers
+    # Output type: simple list CSV
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 5,12,48,77
 
 Scenario 4b: Same idea, but targets include ranges too
+    # Output type: simple list CSV
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 1-10,20,25-30
 
 Scenario 5: Use a different reference frame and custom output folder
@@ -89,10 +108,16 @@ Scenario 7: Build an all-vs-all RMSD matrix for all frames you want to include
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --compare-all --all-vs-all
 
 Scenario 8: Explicit 1vN using targets list
+    # Output type: simple list CSV
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 2,4,5,9
 
 Scenario 9: Nvs1 matrix with references on rows and target on columns
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frames 2,4,5,9,12 --targets 45
+
+Scenario 10: 1vN matrix with one reference on rows and many targets on columns
+    # Use this when you want frame 3 on the vertical axis and many targets on the horizontal axis.
+    # Even though it is conceptually "1 vs N", use --reference-frames for matrix output.
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frames 3 --targets 10,25,50,100,250
 
 Important path note for teams cloning from GitHub:
     Replace each placeholder with a path from your own machine.
@@ -106,7 +131,7 @@ What this script does:
 - Uses Biopython to parse atoms in the selected reference frame and selected target frames.
 - Supports atom filtering by scope (`full` or `backbone`) or by explicit atom names (`--atoms`).
 - Compares each selected target frame against one selected reference frame.
-- Supports 1v1, 1vN, 2v1, 5v1, and larger Nv1 comparisons.
+- Supports 1v1, 1vN, 2v1, 5v1, and larger Nv1 comparisons as simple list CSV output.
 - Supports NvsM reference-target matrix output with reference frames as CSV rows and target frames as CSV columns (`--reference-frames` + `--targets`).
 - Optionally supports all-vs-all matrix generation for selected frames (`--all-vs-all`).
 - Requires at least two frames in the input file overall.

@@ -208,6 +208,17 @@ Use this pattern to avoid confusion:
 - `--reference-frame ... --targets ...`
 - `--reference-frames ... --targets ...`
 
+Very important output rule:
+- `--reference-frame ... --targets ...` gives a simple list CSV.
+- `--reference-frames ... --targets ...` gives a matrix CSV.
+- If you want reference frames on the vertical axis and target frames on the horizontal axis, use `--reference-frames ... --targets ...`.
+- This is true even if you only have one reference frame.
+
+Zero-doubt shortcut:
+- Want a simple two-column list of RMSD values? Use `--reference-frame`.
+- Want an Excel-style matrix with row labels and column labels? Use `--reference-frames`.
+- One reference frame can still be written as a matrix row. In that case, still use `--reference-frames 3`, not `--reference-frame 3`.
+
 #### Scenario B1: one reference frame and many target frames
 Use this when you want one reference frame on the left and several target frames across the top.
 
@@ -221,10 +232,12 @@ What this command means:
 - The output is one CSV table.
 - The row labels are the reference frames.
 - The column labels are the target frames.
+- This is matrix mode, not simple list mode.
 
 When to use it:
 - Use it when you want a table where the rows and columns are not the same.
 - This is the easiest way to read a reference-vs-target comparison.
+- Use this when you want one reference on the vertical axis and many targets on the horizontal axis.
 
 #### Scenario B2: all-vs-all matrix
 Use this when you want every chosen frame compared to every other chosen frame.
@@ -298,6 +311,11 @@ How to read it:
 
 What you get:
 - A small CSV containing RMSD values for those target frames only.
+- This is a simple list CSV, not a matrix.
+
+Important note:
+- Even though this is conceptually "1 vs N", it is not written as a row-and-column matrix.
+- If you want frame 5 on the vertical axis and target frames across the top, use `--reference-frames 5 --targets ...` instead.
 
 Expected output filename (default):
 - `<path-to-output-folder>\\rmsd_per_frame.csv`
@@ -317,6 +335,11 @@ How to read it:
 
 What you get:
 - A compact table of RMSD values for a specific subset of frames.
+- This is a simple list CSV, not a matrix.
+
+Important note:
+- This output will not place target frame numbers as horizontal column headers.
+- To force that orientation, switch to matrix mode with `--reference-frames 1 --targets 2,4,5,9`.
 
 Expected output filename (default):
 - `<path-to-output-folder>\\rmsd_per_frame.csv`
@@ -478,6 +501,15 @@ How to read it:
 
 What you get:
 - A clean table ready for Excel with reference vertical and targets horizontal.
+
+Why this scenario matters:
+- Some users think `--reference-frame 3 --targets ...` will make a horizontal matrix.
+- It will not.
+- To force matrix orientation, use `--reference-frames 3 --targets ...` instead.
+
+Simple memory rule:
+- Singular `--reference-frame` = list output.
+- Plural `--reference-frames` = matrix output.
 
 Expected output filename (default):
 - `<path-to-output-folder>\\rmsd_per_frame.csv`
