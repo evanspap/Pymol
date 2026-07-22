@@ -33,8 +33,8 @@ Set-Location "C:\Users\yagd9\Documents\Stony Brook AI Drug Discovery\Github\Pymo
 ```
 
 3. Replace these two placeholders in the commands below:
-- <path-to-your-pdb-file>
-- <path-to-output-folder>
+- `<path-to-your-pdb-file>`
+- `<path-to-output-folder>`
 
 That is all you need to change in most cases.
 
