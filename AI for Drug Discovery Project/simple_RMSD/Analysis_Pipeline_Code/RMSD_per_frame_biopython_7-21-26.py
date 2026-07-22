@@ -1,8 +1,13 @@
-"""Biopython RMSD calculator for target-vs-reference frame comparisons (no matrix output).
-### Version 1.0 (Subject to Updates and Change)
+"""Biopython RMSD calculator for target-vs-reference frame comparisons and matrix-style RMSD tables.
+### Version 1.1 (Subject to Updates and Change)
 ## Author(s): Yagna Devarakonda, Research Volunteer/Assistant, Stony Brook University, NY, USA
 ## Dr. Evangelos Papadopoulos, Professor, Dana-Farber Cancer Institute 
-## Date: 7-19-26
+## Date: 7-21-26
+
+This file is the full-featured version of the RMSD workflow.
+It builds on the smaller, barebones helper file named
+RMSD_calculation_function_7-19-26.py, which is meant for simple direct RMSD
+calculations in the terminal.
 
 **DISCLAIMER**
 =============
@@ -17,68 +22,92 @@ modifications, dependencies, or other factors outside the authors' control.**
 
 PowerShell usage (copy one scenario at a time):
 
+Command-order convention used below (for clarity):
+    1) reference first
+    2) targets second
+
+In other words, when both are used, write:
+    --reference-frame ... --targets ...
+or
+    --reference-frames ... --targets ...
+
 Option A: Run from the folder that contains this script
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
 
 Option B: Run from anywhere by using the full script path
-    python "<path-to-this-script>\RMSD_per_frame_biopython_7-19-26.py" --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
+    python "<path-to-this-script>\RMSD_per_frame_biopython_7-21-26.py" --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
 
 Sample commands:
     # Default: compare every frame to frame 1 using all atoms
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
 
-    # Backbone-only comparison
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --atom-scope backbone
+    # Backbone-only comparison:
+    # Uses only protein backbone atoms (N, CA, C, O, and OXT when present)
+    # and ignores side-chain atoms. This is useful when you want overall
+    # fold/motion trends with less side-chain noise.
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --atom-scope backbone
 
-    # Use only specific frames and a custom reference frame
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --frames 5,12,48 --reference-frame 5
+    # Use a custom reference and explicit target frames (reference first, targets second)
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 5 --targets 12,48
 
     # 1vN example (reference 1 vs targets 2,4,5,9)
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 2,4,5,9
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 2,4,5,9
 
-    # Use a frame range and specific atoms
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --frame-start 10 --frame-end 25 --atoms CA,CB,N
+    # Use explicit targets plus specific atoms (reference first, targets second)
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 10-25 --atoms CA,CB,N
 
 Scenario 1: Compare all frames to frame 1 (easy default)
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
 
 Scenario 1b: Same thing, but say it explicitly
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --compare-all
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --compare-all
 
 Scenario 2: Backbone-only RMSD relative to the first frame
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --atom-scope backbone
+    # "Backbone-only" means only N, CA, C, O, OXT are used for RMSD.
+    # Side-chain atoms are excluded.
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --atom-scope backbone
 
-Scenario 3: Compare only a specific frame range
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --frame-start 10 --frame-end 25
+Scenario 3: Compare a reference frame against a target range
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 10-25
 
-Scenario 4: Compare only specific frame numbers (simple list)
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --frames 5,12,48,77
+Scenario 4: Compare a reference frame against specific target frame numbers
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 5,12,48,77
 
-Scenario 4b: Same idea, but with ranges too
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --frames 1-10,20,25-30
+Scenario 4b: Same idea, but targets include ranges too
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 1-10,20,25-30
 
 Scenario 5: Use a different reference frame and custom output folder
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --reference-frame 10 --output-dir "<path-to-results-folder>"
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --reference-frame 10 --output-dir "<path-to-results-folder>"
 
-Scenario 6: Compare only a few specific atoms and a small frame list
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --frames 1-10,20 --atoms CA,CB,N
+Scenario 6: Compare specific atoms with explicit targets
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 1-10,20 --atoms CA,CB,N
 
-Scenario 7: Build an all-vs-all RMSD matrix for selected frames
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --frames 1-100 --all-vs-all
+Scenario 7: Build an all-vs-all RMSD matrix for all frames you want to include
+    # Use this when you want every chosen frame compared against every other chosen frame.
+    # If your file has 1,000 frames, this means all 1,000 can be included.
+    # The --compare-all flag means "use every frame in the PDB file."
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --compare-all --all-vs-all
 
 Scenario 8: Explicit 1vN using targets list
-    python .\RMSD_per_frame_biopython_7-19-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 2,4,5,9
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 2,4,5,9
+
+Scenario 9: Nvs1 matrix with references on rows and target on columns
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frames 2,4,5,9,12 --targets 45
 
 Important path note for teams cloning from GitHub:
     Replace each placeholder with a path from your own machine.
     If you want to avoid typing the full script path, open PowerShell in the script folder first.
 
 What this script does:
+- This is the full-featured RMSD script.
+- The smaller helper file RMSD_calculation_function_7-19-26.py is the
+    barebones version if you only want one simple RMSD value in the terminal.
 - Reads a multi-frame PDB trajectory and extracts each model/frame.
 - Uses Biopython to parse atoms in the selected reference frame and selected target frames.
 - Supports atom filtering by scope (`full` or `backbone`) or by explicit atom names (`--atoms`).
 - Compares each selected target frame against one selected reference frame.
 - Supports 1v1, 1vN, 2v1, 5v1, and larger Nv1 comparisons.
+- Supports NvsM reference-target matrix output with reference frames as CSV rows and target frames as CSV columns (`--reference-frames` + `--targets`).
 - Optionally supports all-vs-all matrix generation for selected frames (`--all-vs-all`).
 - Requires at least two frames in the input file overall.
 - Writes results to CSV in one of two formats:
@@ -111,9 +140,9 @@ def parse_args():
         description="Compute target-vs-reference RMSD values from a multi-frame PDB file using Biopython.",
         epilog=(
             "Examples:\n"
-            "  python RMSD_per_frame_biopython_7-19-26.py --input <path-to-your-pdb-file>\n"
-            "  python RMSD_per_frame_biopython_7-19-26.py --input <path-to-your-pdb-file> --atom-scope backbone\n"
-            "  python RMSD_per_frame_biopython_7-19-26.py --input <path-to-your-pdb-file> --reference-frame 5 --targets 2,4,5,9 --output-dir <path-to-results-folder>"
+            "  python RMSD_per_frame_biopython_7-21-26.py --input <path-to-your-pdb-file>\n"
+            "  python RMSD_per_frame_biopython_7-21-26.py --input <path-to-your-pdb-file> --atom-scope backbone\n"
+            "  python RMSD_per_frame_biopython_7-21-26.py --input <path-to-your-pdb-file> --reference-frame 5 --targets 2,4,5,9 --output-dir <path-to-results-folder>"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -153,6 +182,16 @@ def parse_args():
         type=int,
         default=1,
         help="Reference frame number used for RMSD comparison (1-based index).",
+    )
+    parser.add_argument(
+        "--reference-frames",
+        type=str,
+        default=None,
+        help=(
+            "Optional reference-frame list for NvsM matrix mode "
+            "(example: 2,4,5,9 or 2-10,15). "
+            "Use together with --targets to produce a single CSV where references are rows and targets are columns."
+        ),
     )
     parser.add_argument(
         "--compare-all",
@@ -548,6 +587,22 @@ def write_rmsd_matrix_csv(frame_numbers, matrix, output_csv):
             writer.writerow([frame_number] + [f"{value:.6f}" for value in row])
 
 
+def write_reference_target_matrix_csv(reference_frames, target_frames, matrix, output_csv):
+    """Write a reference-target RMSD matrix CSV.
+
+    CSV orientation:
+    - Vertical axis (rows): reference frames
+    - Horizontal axis (columns): target frames
+    """
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_csv, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["ReferenceFrame"] + target_frames)
+        for reference_frame, row in zip(reference_frames, matrix):
+            writer.writerow([reference_frame] + [f"{value:.6f}" for value in row])
+
+
 def main():
     """Run the per-frame RMSD workflow from the command line.
 
@@ -626,6 +681,64 @@ def main():
         frame_numbers, matrix = compute_rmsd_matrix(frames_parsed)
         write_rmsd_matrix_csv(frame_numbers, matrix, output_csv)
         print(f"Saved all-vs-all RMSD matrix CSV to: {output_csv}")
+        return
+
+    # NvsM mode: explicit references on rows and explicit targets on columns.
+    # This is the easiest way to get a single Excel-friendly table where row and
+    # column meaning is fixed and obvious.
+    if args.reference_frames:
+        if not args.targets:
+            raise ValueError(
+                "When using --reference-frames, you must also provide --targets. "
+                "Example: --reference-frames 2,4,5,9 --targets 45"
+            )
+
+        reference_frame_numbers = parse_frame_list_text(args.reference_frames, len(frame_texts))
+        target_frame_numbers = parse_frame_list_text(args.targets, len(frame_texts))
+
+        if not reference_frame_numbers:
+            raise ValueError("No valid reference frames were provided in --reference-frames.")
+        if not target_frame_numbers:
+            raise ValueError("No valid target frames were provided in --targets.")
+
+        print("Mode: reference-target matrix (rows=references, columns=targets)")
+        print(f"Reference frames (rows): {reference_frame_numbers}")
+        print(f"Target frames (columns): {target_frame_numbers}")
+
+        # Parse all frames involved once, then reuse cached coordinates.
+        needed_frames = sorted(set(reference_frame_numbers + target_frame_numbers))
+        parsed_by_frame = {}
+        total = len(needed_frames)
+
+        for position, frame_number in enumerate(needed_frames, start=1):
+            frame_text = frame_texts[frame_number - 1]
+            atom_keys, coords = parse_frame_with_biopython(
+                frame_text,
+                frame_number,
+                parser,
+                args.atom_scope,
+                selected_atoms=selected_atoms,
+            )
+            parsed_by_frame[frame_number] = (atom_keys, coords)
+            if position % 100 == 0 or position == total:
+                print(f"Parsed {position}/{total} frames used in matrix")
+
+        matrix = np.zeros((len(reference_frame_numbers), len(target_frame_numbers)), dtype=np.float64)
+
+        for i, ref_frame in enumerate(reference_frame_numbers):
+            ref_keys, ref_coords = parsed_by_frame[ref_frame]
+            for j, tgt_frame in enumerate(target_frame_numbers):
+                tgt_keys, tgt_coords = parsed_by_frame[tgt_frame]
+                aligned_target = align_to_reference(tgt_keys, tgt_coords, ref_keys)
+                matrix[i, j] = calculate_rmsd(ref_coords, aligned_target)
+
+        write_reference_target_matrix_csv(
+            reference_frame_numbers,
+            target_frame_numbers,
+            matrix,
+            output_csv,
+        )
+        print(f"Saved reference-target RMSD matrix CSV to: {output_csv}")
         return
 
     if args.reference_frame < 1 or args.reference_frame > len(frame_texts):
