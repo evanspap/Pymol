@@ -72,6 +72,23 @@ Sample commands:
     # Use explicit targets plus specific atoms (reference first, targets second)
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 10-25 --atoms CA,CB,N
 
+    # Use only specific residue numbers (with optional atom filter)
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frame 1 --targets 10-25 --residues 5,10-20 --atoms CA
+
+Atom-name legend (what these labels mean):
+    N   = backbone amide nitrogen
+    CA  = alpha carbon (backbone)
+    C   = backbone carbonyl carbon
+    O   = backbone carbonyl oxygen
+    OXT = terminal carboxylate oxygen (often only at C-terminus)
+    CB  = beta carbon (first side-chain carbon for most amino acids)
+
+Notes:
+    - "Backbone-only" mode uses N, CA, C, O, and OXT.
+    - Example custom list --atoms CA,CB,N means:
+        alpha carbon + beta carbon + backbone nitrogen.
+    - Atom names must match PDB atom-name fields used in your structure.
+
 Scenario 1: Compare all frames to frame 1 (easy default)
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>"
 
@@ -119,6 +136,11 @@ Scenario 10: 1vN matrix with one reference on rows and many targets on columns
     # Even though it is conceptually "1 vs N", use --reference-frames for matrix output.
     python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frames 3 --targets 10,25,50,100,250
 
+Scenario 11: Compare only a residue subset
+    # Use this when you want RMSD from specific residue numbers only.
+    # You can combine --residues with --atom-scope or --atoms.
+    python .\RMSD_per_frame_biopython_7-21-26.py --input "<path-to-your-pdb-file>" --output-dir "<path-to-output-folder>" --reference-frames 1-10 --targets 5 --residues 1-36 --atoms CA
+
 Important path note for teams cloning from GitHub:
     Replace each placeholder with a path from your own machine.
     If you want to avoid typing the full script path, open PowerShell in the script folder first.
@@ -130,6 +152,7 @@ What this script does:
 - Reads a multi-frame PDB trajectory and extracts each model/frame.
 - Uses Biopython to parse atoms in the selected reference frame and selected target frames.
 - Supports atom filtering by scope (`full` or `backbone`) or by explicit atom names (`--atoms`).
+- Supports residue-number filtering with `--residues` (example: `1-36,45,50-60`).
 - Compares each selected target frame against one selected reference frame.
 - Supports 1v1, 1vN, 2v1, 5v1, and larger Nv1 comparisons as simple list CSV output.
 - Supports NvsM reference-target matrix output with reference frames as CSV rows and target frames as CSV columns (`--reference-frames` + `--targets`).
@@ -201,6 +224,16 @@ def parse_args():
         type=str,
         default=None,
         help="Optional comma-separated atom names to use (example: CA,CB,N). If given, this overrides --atom-scope.",
+    )
+    parser.add_argument(
+        "--residues",
+        type=str,
+        default=None,
+        help=(
+            "Optional residue-number list using commas/ranges "
+            "(example: 1-36,45,50-60). "
+            "Only atoms from these residue sequence numbers are kept."
+        ),
     )
     parser.add_argument(
         "--reference-frame",
@@ -430,6 +463,47 @@ def parse_atom_selection(atom_text):
     return atom_names
 
 
+def parse_residue_selection(residue_text):
+    """Convert a residue selection text into a set of residue sequence numbers.
+
+    Example inputs:
+    - "10,15,20"
+    - "1-36,45,50-60"
+    """
+    if residue_text is None or not str(residue_text).strip():
+        return None
+
+    selected = set()
+    for part in str(residue_text).split(","):
+        item = part.strip()
+        if not item:
+            continue
+
+        if "-" in item:
+            start_text, end_text = item.split("-", 1)
+            try:
+                start = int(start_text.strip())
+                end = int(end_text.strip())
+            except ValueError as exc:
+                raise ValueError(f"Invalid residue range in --residues: {item}") from exc
+
+            if start > end:
+                raise ValueError(f"Invalid residue range in --residues: {item}")
+
+            selected.update(range(start, end + 1))
+            continue
+
+        try:
+            selected.add(int(item))
+        except ValueError as exc:
+            raise ValueError(f"Invalid residue number in --residues: {item}") from exc
+
+    if not selected:
+        return None
+
+    return selected
+
+
 def atom_key(atom):
     """Build a stable sort key so atoms are matched consistently across frames.
 
@@ -451,7 +525,14 @@ def atom_key(atom):
     )
 
 
-def parse_frame_with_biopython(frame_text, frame_index, parser, atom_scope, selected_atoms=None):
+def parse_frame_with_biopython(
+    frame_text,
+    frame_index,
+    parser,
+    atom_scope,
+    selected_atoms=None,
+    residue_numbers=None,
+):
     """Parse one frame with Biopython and return sorted atom keys and coordinates.
 
     Sorting by atom identity ensures the coordinates line up across frames even if
@@ -467,6 +548,12 @@ def parse_frame_with_biopython(frame_text, frame_index, parser, atom_scope, sele
     atoms = []
     for atom in model.get_atoms():
         atom_name = atom.get_name().strip().upper()
+        residue = atom.get_parent()
+        residue_seq = residue.get_id()[1] if residue is not None else None
+
+        # If the user supplied residue numbers, keep only those residues.
+        if residue_numbers is not None and residue_seq not in residue_numbers:
+            continue
 
         # If the user supplied explicit atom names, those win.
         if selected_atoms is not None and atom_name not in selected_atoms:
@@ -655,6 +742,7 @@ def main():
 
     # Convert the optional atom list into a set once, then reuse it everywhere.
     selected_atoms = parse_atom_selection(args.atoms)
+    residue_numbers = parse_residue_selection(args.residues)
 
     print(f"Reading PDB file: {input_path}")
     frame_texts = split_frames_from_pdb(input_path)
@@ -675,6 +763,8 @@ def main():
     if selected_atoms is not None:
         print(f"Specific atoms selected: {sorted(selected_atoms)}")
         print("Note: --atoms overrides --atom-scope.")
+    if residue_numbers is not None:
+        print(f"Residue numbers selected: {sorted(residue_numbers)}")
 
     parser = PDBParser(QUIET=True)
 
@@ -698,6 +788,7 @@ def main():
                 parser,
                 args.atom_scope,
                 selected_atoms=selected_atoms,
+                residue_numbers=residue_numbers,
             )
             frames_parsed.append((frame_number, atom_keys, coords))
             if position % 100 == 0 or position == total:
@@ -743,6 +834,7 @@ def main():
                 parser,
                 args.atom_scope,
                 selected_atoms=selected_atoms,
+                residue_numbers=residue_numbers,
             )
             parsed_by_frame[frame_number] = (atom_keys, coords)
             if position % 100 == 0 or position == total:
@@ -801,6 +893,7 @@ def main():
         parser,
         args.atom_scope,
         selected_atoms=selected_atoms,
+        residue_numbers=residue_numbers,
     )
 
     rmsd_rows = []
@@ -814,6 +907,7 @@ def main():
             parser,
             args.atom_scope,
             selected_atoms=selected_atoms,
+            residue_numbers=residue_numbers,
         )
         aligned_coords = align_to_reference(atom_keys, coords, reference_keys)
         rmsd_value = calculate_rmsd(aligned_coords, reference_coords)
