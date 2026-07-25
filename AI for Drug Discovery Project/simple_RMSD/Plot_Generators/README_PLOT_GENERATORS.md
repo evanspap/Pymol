@@ -7,6 +7,7 @@ This folder contains plotting scripts for visualizing RMSD outputs.
 - plot_rmsd_category_histogram.py
 - plot_rmsd_full_vs_backbone_histograms.py
 - plot_rmsd_matrix_histograms.py
+- plot_rmsd_pairwise_heatmap.py
 
 ## PowerShell Quick Start
 1. Move to this folder:
@@ -31,6 +32,12 @@ Set-Location "C:\Users\yagd9\Documents\Stony Brook AI Drug Discovery\Github\Pymo
 
 ```powershell
 & "c:/Users/yagd9/Documents/Stony Brook AI Drug Discovery/Github/Pymol/AI for Drug Discovery Project/.venv/Scripts/python.exe" .\plot_rmsd_full_vs_backbone_histograms.py
+```
+
+5. Example run (pairwise RMSD heatmap):
+
+```powershell
+py -3 .\plot_rmsd_pairwise_heatmap.py --input "C:\path\to\your\all-vs-all_rmsd_matrix.csv" --output-dir "C:\path\to\your\plot_output"
 ```
 
 ## Notes
