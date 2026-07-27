@@ -1,0 +1,4 @@
+Comparison,Frames,Pairs,CommonAtoms,MeanRMSD,StdRMSD,FitAmplitude,FitMu,FitSigma
+full,3,9,5,0.133333,0.115470,1.000000,0.191971,0.084824
+backbone,3,9,4,0.133333,0.115470,1.000000,0.191971,0.084824
+sidechain,3,9,1,0.133333,0.115470,1.000000,0.191971,0.084824

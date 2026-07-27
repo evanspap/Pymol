@@ -1,0 +1,2 @@
+Comparison,Frames,Pairs,CommonAtoms,MeanRMSD,StdRMSD,FitModel,FitBIC,FitAmplitude,FitMu,FitSigma
+full,1002,1004004,2945,4.328866,1.505809,gaussian_mixture_2,-436.165339,0.073998,3.149587,1.524809

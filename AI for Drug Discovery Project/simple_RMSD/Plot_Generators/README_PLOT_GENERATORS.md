@@ -3,11 +3,14 @@
 This folder contains plotting scripts for visualizing RMSD outputs.
 
 ## Files
+- Curve_Fit .py
 - plot_rmsd_backbone_vs_full_histograms.py
 - plot_rmsd_category_histogram.py
 - plot_rmsd_full_vs_backbone_histograms.py
 - plot_rmsd_matrix_histograms.py
 - plot_rmsd_pairwise_heatmap.py
+- README_CURVE_FIT.md
+- README_HEATMAP.md
 
 ## PowerShell Quick Start
 1. Move to this folder:
@@ -39,6 +42,16 @@ Set-Location "C:\Users\yagd9\Documents\Stony Brook AI Drug Discovery\Github\Pymo
 ```powershell
 py -3 .\plot_rmsd_pairwise_heatmap.py --input "C:\path\to\your\all-vs-all_rmsd_matrix.csv" --output-dir "C:\path\to\your\plot_output"
 ```
+
+6. Example run (PDB-driven RMSD histogram + Gaussian fit):
+
+```powershell
+py -3 ".\Curve_Fit .py" --pdb "C:\path\to\your\frames.pdb" --output-dir "C:\path\to\your\plot_output" --comparisons full backbone --bin-width 0.2
+```
+
+## Cookbook Guides
+- For the Curve_Fit workflow: see `README_CURVE_FIT.md`
+- For the heatmap workflow: see `README_HEATMAP.md`
 
 ## Notes
 - Scripts may require CSV/RMSD outputs generated beforehand; check each script's expected input path.
