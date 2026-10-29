@@ -29,8 +29,10 @@ PyMOL's `resi` value, preserving insertion codes. Standard amino acids use their
 one-letter codes; selenocysteine (`SEC`) maps to `U`, pyrrolysine (`PYL`) to `O`,
 and unrecognized residue names to `X`.
 
-The command is also available as **Plugin > Label CA Residues** when installed
-through PyMOL's Plugin Manager. Command help is available with `help label_around`.
+The command is also available as **Plugin > Protein Tools > Label CA Residues**
+when installed through PyMOL's Plugin Manager. The related ShowAround plugin
+shares the **Protein Tools** submenu. Command help is available with
+`help label_around`.
 
 ## Tests
 

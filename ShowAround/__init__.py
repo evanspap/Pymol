@@ -71,9 +71,9 @@ def _register_commands():
 def __init_plugin__(app=None):
     _register_commands()
     try:
-        from pymol.plugins import addmenuitemqt
+        from pymol.plugins import addmenuitem
 
-        addmenuitemqt("Show Around (6 A)", _run_default)
+        addmenuitem("Protein Tools|Show Around (6 A)", _run_default)
     except Exception:
         try:
             app.rootmenu.addmenuitem(
