@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="470" viewBox="0 0 1120 470" role="img" aria-labelledby="title description">
+  <title id="title">Contact map plot modes</title>
+  <desc id="description">Schematic current-frame cutoff contact map beside a split matrix whose upper triangle shows mean CA distance and lower triangle shows distance standard deviation.</desc>
+  <defs>
+    <linearGradient id="viridis" x1="0" x2="0" y1="1" y2="0">
+      <stop offset="0%" stop-color="#440154"/>
+      <stop offset="25%" stop-color="#3b528b"/>
+      <stop offset="50%" stop-color="#21918c"/>
+      <stop offset="75%" stop-color="#5ec962"/>
+      <stop offset="100%" stop-color="#fde725"/>
+    </linearGradient>
+    <style>
+      text { font-family: Segoe UI, Arial, sans-serif; fill: #273437; }
+      .heading { font-size: 20px; font-weight: 600; }
+      .small { font-size: 13px; }
+      .axis { font-size: 12px; fill: #526064; }
+      .panel { fill: #ffffff; stroke: #d9e0df; stroke-width: 1.5; }
+      .cell { stroke: #ffffff; stroke-width: 2; }
+    </style>
+  </defs>
+  <rect width="1120" height="470" fill="#f4f7f6"/>
+  <text x="40" y="38" class="heading">Contact-map views</text>
+  <text x="40" y="62" class="small">Conceptual illustration, not an application screenshot</text>
+
+  <rect x="30" y="82" width="500" height="350" rx="8" class="panel"/>
+  <text x="55" y="116" class="heading">Current frame cutoff</text>
+  <text x="55" y="139" class="small">CA-to-CA distance at or below the cutoff</text>
+  <text x="108" y="171" class="axis">Residue</text>
+  <text x="67" y="316" class="axis" transform="rotate(-90 67 316)">Residue</text>
+  <g transform="translate(125 185)">
+    <rect x="0" y="0" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="36" y="0" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="72" y="0" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="108" y="0" width="36" height="36" fill="#fde725" class="cell"/>
+    <rect x="144" y="0" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="180" y="0" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="0" y="36" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="36" y="36" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="72" y="36" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="108" y="36" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="144" y="36" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="180" y="36" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="0" y="72" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="36" y="72" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="72" y="72" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="108" y="72" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="144" y="72" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="180" y="72" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="0" y="108" width="36" height="36" fill="#fde725" class="cell"/>
+    <rect x="36" y="108" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="72" y="108" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="108" y="108" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="144" y="108" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="180" y="108" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="0" y="144" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="36" y="144" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="72" y="144" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="108" y="144" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="144" y="144" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="180" y="144" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="0" y="180" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="36" y="180" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="72" y="180" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="108" y="180" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="144" y="180" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="180" y="180" width="36" height="36" fill="#440154" class="cell"/>
+  </g>
+  <rect x="380" y="195" width="18" height="160" rx="3" fill="url(#viridis)"/>
+  <text x="406" y="206" class="small">Contact</text>
+  <text x="406" y="226" class="small">1</text>
+  <text x="406" y="355" class="small">0</text>
+  <rect x="380" y="375" width="14" height="14" fill="#ffffff" stroke="#aeb8b6"/>
+  <text x="401" y="387" class="small">Excluded pair</text>
+
+  <rect x="550" y="82" width="540" height="350" rx="8" class="panel"/>
+  <text x="575" y="116" class="heading">Split mean distance / SD</text>
+  <text x="575" y="139" class="small">Upper triangle = mean distance; lower triangle = distance SD</text>
+  <text x="625" y="171" class="axis">Residue</text>
+  <text x="584" y="316" class="axis" transform="rotate(-90 584 316)">Residue</text>
+  <g transform="translate(642 185)">
+    <rect x="0" y="0" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="36" y="0" width="36" height="36" fill="#3b528b" class="cell"/>
+    <rect x="72" y="0" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="108" y="0" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="144" y="0" width="36" height="36" fill="#fde725" class="cell"/>
+    <rect x="180" y="0" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="0" y="36" width="36" height="36" fill="#3b528b" class="cell"/>
+    <rect x="36" y="36" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="72" y="36" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="108" y="36" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="144" y="36" width="36" height="36" fill="#fde725" class="cell"/>
+    <rect x="180" y="36" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="0" y="72" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="36" y="72" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="72" y="72" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="108" y="72" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="144" y="72" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="180" y="72" width="36" height="36" fill="#fde725" class="cell"/>
+    <rect x="0" y="108" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="36" y="108" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="72" y="108" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="108" y="108" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="144" y="108" width="36" height="36" fill="#3b528b" class="cell"/>
+    <rect x="180" y="108" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="0" y="144" width="36" height="36" fill="#fde725" class="cell"/>
+    <rect x="36" y="144" width="36" height="36" fill="#fde725" class="cell"/>
+    <rect x="72" y="144" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="108" y="144" width="36" height="36" fill="#3b528b" class="cell"/>
+    <rect x="144" y="144" width="36" height="36" fill="#440154" class="cell"/>
+    <rect x="180" y="144" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="0" y="180" width="36" height="36" fill="#5ec962" class="cell"/>
+    <rect x="36" y="180" width="36" height="36" fill="#ffffff" class="cell"/>
+    <rect x="72" y="180" width="36" height="36" fill="#fde725" class="cell"/>
+    <rect x="108" y="180" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="144" y="180" width="36" height="36" fill="#21918c" class="cell"/>
+    <rect x="180" y="180" width="36" height="36" fill="#440154" class="cell"/>
+  </g>
+  <rect x="908" y="190" width="14" height="85" rx="3" fill="url(#viridis)"/>
+  <text x="930" y="202" class="small">Mean (A)</text>
+  <text x="930" y="275" class="small">0 to max</text>
+  <rect x="908" y="305" width="14" height="75" rx="3" fill="url(#viridis)"/>
+  <text x="930" y="317" class="small">SD (A)</text>
+  <text x="930" y="380" class="small">0 to max</text>
+</svg>
