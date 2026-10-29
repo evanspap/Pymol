@@ -1,3 +1,10 @@
+# Name: Label Around
+# Version: 1.0
+# Date: 2026-10-29
+# Author: William Sandor, Evangelos Papadopoulos, Gerasimos Papadopoulos
+# Summary: Label selected CA atoms with one-letter amino-acid codes and residue identifiers.
+# Usage: label_around [selection] (defaults to sele)
+
 """PyMOL plugin for labeling alpha-carbon atoms with residue identifiers."""
 
 from __future__ import annotations

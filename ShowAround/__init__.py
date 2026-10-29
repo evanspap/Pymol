@@ -1,3 +1,10 @@
+# Name: Show Around
+# Version: 1.0
+# Date: 2026-10-29
+# Author: William Sandor, Evangelos Papadopoulos, Gerasimos Papadopoulos
+# Summary: Select complete protein residues within a distance of a source selection.
+# Usage: show_around [selection [, distance [, output_name]]] (defaults to sele, 6 A, nearby_residues)
+
 """PyMOL plugin for selecting protein residues near a source selection."""
 
 from __future__ import annotations
