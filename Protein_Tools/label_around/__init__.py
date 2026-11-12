@@ -1,6 +1,6 @@
 # Name: Label Around
-# Version: 1.0
-# Date: 2026-10-29
+# Version: 1.2
+# Date: 2026-11-12
 # Author: William Sandor, Evangelos Papadopoulos, Gerasimos Papadopoulos
 # Summary: Label selected CA atoms with one-letter amino-acid codes and residue identifiers.
 # Usage: label_around [selection] (defaults to sele)

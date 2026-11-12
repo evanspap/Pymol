@@ -6,7 +6,11 @@ positions; the command clears any per-atom label offsets left by earlier runs.
 
 ## Use
 
-Load the plugin source in PyMOL:
+Install the parent `Protein_Tools` package through PyMOL's Plugin Manager. The
+parent package loads this plugin and adds it to the shared menu. Do not install
+this subfolder separately.
+
+For a one-session manual load, run the source file:
 
 ```pymol
 run /path/to/label_around/__init__.py
@@ -29,12 +33,10 @@ PyMOL's `resi` value, preserving insertion codes. Standard amino acids use their
 one-letter codes; selenocysteine (`SEC`) maps to `U`, pyrrolysine (`PYL`) to `O`,
 and unrecognized residue names to `X`.
 
-The command is also available as **Plugin > Protein Tools > Label CA Residues**
-when installed through PyMOL's Plugin Manager. The related ShowAround plugin
-shares the **Protein Tools** submenu. Command help is available with
-`help label_around`.
+The command is also available as **Plugin > Protein Tools > Label CA Residues**.
+Command help is available with `help label_around`.
 
 ## Tests
 
 Run `python -m unittest` from this folder. Tests mock PyMOL's command API and
-check CA-only labeling, amino-acid labels, and the viewport-up offset.
+check CA-only labeling and amino-acid labels.

@@ -1,6 +1,6 @@
 # Name: Show Around
-# Version: 1.0
-# Date: 2026-10-29
+# Version: 1.1
+# Date: 2026-11-12
 # Author: William Sandor, Evangelos Papadopoulos, Gerasimos Papadopoulos
 # Summary: Select complete protein residues within a distance of a source selection.
 # Usage: show_around [selection [, distance [, output_name]]] (defaults to sele, 6 A, nearby_residues)

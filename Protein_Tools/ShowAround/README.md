@@ -7,7 +7,11 @@ selection, `sele`, a 6 angstrom radius, and the output selection name
 
 ## Use
 
-Load the plugin source in PyMOL:
+Install the parent `Protein_Tools` package through PyMOL's Plugin Manager. The
+parent package loads this plugin and adds it to the shared menu. Do not install
+this subfolder separately.
+
+For a one-session manual load, run the source file:
 
 ```pymol
 run /path/to/ShowAround/__init__.py
@@ -31,10 +35,8 @@ The syntax is `show_around selection, distance, output_name`:
 	chose for the result; it has no special meaning and could instead be
 	`ligand_neighborhood` or another valid selection name.
 
-Installing the folder through PyMOL's Plugin Manager also adds **Plugin > Protein
-Tools > Show Around (6 A)**, which uses the default `sele`, 6 angstrom, and
-`nearby_residues` settings. The command's detailed help is available with
-`help show_around`.
+The menu item is **Plugin > Protein Tools > Show Around (6 A)**. The command's
+detailed help is available with `help show_around`.
 
 The generated selection filters to `polymer.protein` before expanding matching
 atoms with `byres`, so nearby residues are selected in full and non-protein atoms
