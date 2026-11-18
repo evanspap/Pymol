@@ -28,7 +28,13 @@ Open Plugin > UniProt Structures, or use `uniprot_structures_gui`.
   A selected file takes priority over the single-entry field; clear it to use that field.
 - Choose a **Download folder** for persistent files, or leave blank for the system
   temporary cache. Each protein has its own subfolder.
-- Choose PDB, AlphaFold, or both, and an alignment method (`align`, `super`, `cealign`).
+- Choose PDB categories independently: **NMR**, **X-ray**, **EM**, and **Other**.
+  Uncheck **Download AlphaFold model** for experimental-only downloads. For example,
+  NMR-only means keeping only NMR checked among the PDB categories and unchecking AlphaFold.
+  For **AlphaFold only**, uncheck **Download PDB structures** and keep AlphaFold checked.
+  Category filtering happens before the PDB limit and before any coordinate downloads.
+- Choose an alignment method (`align`, `super`, `cealign`). Optionally check
+  **Fit only to AlphaFold regions with pLDDT (B-factor) >**; its default threshold is **50**.
 - Set **PDB limit per protein**; zero means all available PDB references.
 - For many proteins/structures, use **Download only** to save files without adding
   objects to PyMOL or consuming memory for the full collection.
@@ -113,7 +119,8 @@ retained. The selected chain is reported in the activity log.
 
 Structures are aligned as they load, using the protein chain against a single
 protein chain in the AlphaFold reference. If AlphaFold is absent, disabled, or fails
-to load, the first successfully loaded PDB becomes the reference. Alignment failures
+to load, the first successfully loaded PDB becomes the reference (unless the
+AlphaFold confidence filter is enabled; see below). Alignment failures
 are logged and the affected objects are hidden and disabled, so they do not appear
 as if they were successfully fitted. Successful protein chains are shown as cartoons, non-water ligands and other
 non-protein components as sticks, and isolated atoms (including waters and ions)
@@ -122,16 +129,47 @@ object together, preserving ligand positions relative to the protein.
 With alignment switched off, selected chains are displayed without fitting.
 
 The root group is the UniProt entry name, with `AF_<entry_name>` directly inside it.
-Experimental PDB objects use their PDB codes and are grouped under `NMR`, `X-ray`,
-`EM`, or `Other_methods`. Repeated runs use unique names to preserve existing objects.
+Experimental PDB objects use their PDB codes. Method groups are created only when
+at least one structure loads successfully, using the entry-name prefix, method,
+and number of loaded PDB objects. For example:
+
+```text
+TFE2_HUMAN
+  AF_TFE2_HUMAN
+  TFE2_NMR_1
+  TFE2_X-ray_4
+```
+
+No EM folder is created in this example. Counts reflect loaded PDB objects after
+category filtering, the PDB limit, and download/load failures; NMR model states are
+not counted as separate structures. Objects whose alignment failed are still loaded
+and included in the count, although hidden. Counts update during loading, including
+when a job is cancelled. Repeated runs add a collision suffix when needed to preserve
+existing groups. These are PyMOL groups; coordinate files stay in the existing
+per-protein cache folder, avoiding duplicate downloads.
 Only the objects created by the current job have their representations changed.
+
+## AlphaFold confidence-filtered fitting
+
+The optional filter restricts only the **reference atoms used for fitting** to
+protein atoms in the AlphaFold chain whose B-factor field is **strictly greater
+than 50**, or your chosen threshold. The field stores pLDDT in AlphaFold files:
+[AlphaFold FAQ](https://www.alphafold.ebi.ac.uk/faq). Experimental PDB B-factors
+are not filtered or interpreted as confidence. No atoms are deleted by this option;
+the full protein and retained ligands are transformed together and remain available.
+
+The option is off by default and requires an AlphaFold reference. If AlphaFold is
+missing, restricted fitting is not silently replaced with an experimental B-factor
+filter: the affected PDB objects are retained hidden and an error is logged. The
+same happens when too few reference atoms pass the cutoff or fitting fails. Without
+this option, the existing first-PDB reference fallback still applies.
 
 ## Commands
 
 Existing positional syntax is preserved, with new trailing options:
 
 ```pymol
-uniprot_structures query, include_pdb, include_alphafold, align, alignment_method, limit, download_only, cache_dir
+uniprot_structures query, include_pdb, include_alphafold, align, alignment_method, limit, download_only, cache_dir, pdb_methods, af_confidence_only, af_plddt_min
 ```
 
 Defaults: both sources enabled, alignment enabled, method `align`, limit `0`,
@@ -145,12 +183,27 @@ uniprot_structures P06730, 1, 1, 1, align, 0, 1, D:/UniProt_cache/P06730
 
 The last example downloads all selected files without loading them into PyMOL.
 
+New trailing arguments: `pdb_methods=all`, `af_confidence_only=0`, and
+`af_plddt_min=50`. Use `NMR`, `X-ray`, `EM`, `Other`, or combinations such as
+`NMR+EM`; `none` excludes all experimental categories. Examples:
+
+```pymol
+uniprot_structures TFE2_HUMAN, pdb_methods=NMR, include_alphafold=0
+uniprot_structures TFE2_HUMAN, pdb_methods=X-ray, include_alphafold=0
+uniprot_structures TFE2_HUMAN, pdb_methods=EM, include_alphafold=0
+uniprot_structures TFE2_HUMAN, include_pdb=0
+uniprot_structures TFE2_HUMAN, pdb_methods=NMR+EM, af_confidence_only=1, af_plddt_min=50
+```
+
 Batch file command (limit applies to each protein):
 
 ```pymol
 uniprot_structures_file H:/My Drive/uniprot_list.txt, 10
 uniprot_structures_file H:/My Drive/uniprot_list.txt, 0, 1, D:/UniProt_cache
 ```
+
+`uniprot_structures_file` also accepts trailing keyword options `pdb_methods`,
+`include_alphafold`, `af_confidence_only`, and `af_plddt_min`, with the same defaults.
 
 GUI jobs run in a background worker. Command-line calls run synchronously and print
 progress to the console. Only one job can run at a time. Batch entries run sequentially;
@@ -174,7 +227,8 @@ for visualization and **Download only** for bulk acquisition.
 
 `test_plugin.py` covers list parsing, progress and cache accounting, atomic-download
 failure/cancellation handling, batch failure recovery, and actual headless PyMOL
-chain selection, fitting, and failed-alignment visibility. Run with a Python
+chain selection, fitting, and failed-alignment visibility. It also checks method
+filters, nonempty counted groups, and confidence-filtered reference selections. Run with a Python
 interpreter that provides PyMOL (for example PyMOL's bundled Python):
 
 ```powershell

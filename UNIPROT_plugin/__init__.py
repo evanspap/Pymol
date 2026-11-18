@@ -35,7 +35,7 @@ UNIPROT_BASE = "https://rest.uniprot.org/uniprotkb"
 ALPHAFOLD_API = "https://alphafold.ebi.ac.uk/api/prediction/{accession}"
 RCSB_PDB_URL = "https://files.rcsb.org/download/{pdb_id}.pdb"
 RCSB_CIF_URL = "https://files.rcsb.org/download/{pdb_id}.cif"
-USER_AGENT = "PyMOL-UniProt-Structures-Plugin/1.4"
+USER_AGENT = "PyMOL-UniProt-Structures-Plugin/1.5"
 _OPEN_DIALOGS = []
 _RUN_LOCK = threading.Lock()
 
@@ -253,18 +253,35 @@ def _method_subgroup(method: str) -> str:
     return label
 
 
-def _ensure_method_groups(entry_group: str, include_other: bool = False) -> Dict[str, str]:
-    labels = ["NMR", "X-ray", "EM"]
-    if include_other:
-        labels.append("Other_methods")
+def _parse_pdb_methods(value):
+    """None/all selects all experimental methods; an empty iterable selects none."""
+    all_methods = {"NMR", "X-ray", "EM", "Other_methods"}
+    if value is None or (isinstance(value, str) and value.strip().lower() == "all"):
+        return all_methods
+    if isinstance(value, str):
+        value = re.split(r"[+,;|\s]+", value.strip()) if value.strip() else []
+    aliases = {"nmr": "NMR", "xray": "X-ray", "x-ray": "X-ray", "em": "EM",
+               "other": "Other_methods", "other_methods": "Other_methods"}
+    result = set()
+    for method in value:
+        key = str(method).strip().lower()
+        if key == "none":
+            continue
+        if key not in aliases:
+            raise ValueError(f"Unknown PDB category {method!r}; use NMR, X-ray, EM, Other, all, or none.")
+        result.add(aliases[key])
+    return result
 
-    groups: Dict[str, str] = {}
-    for label in labels:
-        subgroup = _unique_object_name(label)
-        cmd.group(subgroup)
-        cmd.group(entry_group, subgroup)
-        groups[label] = subgroup
-    return groups
+
+def _update_method_group(entry_group, prefix, label, current, count):
+    """Create/rename only nonempty PyMOL groups; counts describe loaded objects."""
+    name = _unique_object_name(f"{prefix}_{label}_{count}")
+    if current:
+        cmd.set_name(current, name)
+    else:
+        cmd.group(name)
+    cmd.group(entry_group, name)
+    return name
 
 
 def _protein_chain(object_name, mapped_chains=()):
@@ -310,11 +327,16 @@ def _show_structure(object_name):
     cmd.show("nonbonded", nonprotein)
 
 
-def _align_object(object_name, reference, method, progress):
+def _align_object(object_name, reference, method, progress, reference_b_min=None):
     mobile = f"({object_name}) and polymer.protein"
     target_chain = _protein_chain(reference)
     target = _protein_selection(reference, target_chain)
-    _report(progress, f"Aligning {object_name} to {reference}, reference chain {target_chain!r}, using {method}...")
+    if reference_b_min is not None:
+        target = f"({target}) and b > {float(reference_b_min):g}"
+        if cmd.count_atoms(f"({target}) and name CA") < 3:
+            raise ValueError(f"AlphaFold has fewer than 3 CA atoms with pLDDT > {reference_b_min:g}; restricted alignment skipped.")
+        _report(progress, f"Alignment reference restricted to AlphaFold pLDDT > {reference_b_min:g}; experimental B-factors are not filtered.")
+    _report(progress, f"Aligning {object_name} to {reference}, reference chain {target_chain!r}, using {method}; target: {target}")
     if method == "super":
         result = cmd.super(mobile, target, transform=1)
     elif method == "cealign":
@@ -356,13 +378,20 @@ def read_uniprot_file(filename):
 
 def _load_uniprot_structures(query, include_pdb=True, include_alphafold=True, align=True,
                              alignment_method="align", cache_dir=None, limit=0,
-                             download_only=False, progress=None, cancel=None):
+                             download_only=False, progress=None, cancel=None,
+                             pdb_methods=None, af_confidence_only=False, af_plddt_min=50.0):
     if not download_only and cmd is None:
         raise RuntimeError("Loading structures requires PyMOL.")
     if limit < 0:
         raise ValueError("PDB limit must be zero or positive.")
     if alignment_method not in ("align", "super", "cealign"):
         raise ValueError("Alignment method must be align, super, or cealign.")
+    methods = _parse_pdb_methods(pdb_methods)
+    af_plddt_min = float(af_plddt_min)
+    if not 0 <= af_plddt_min <= 100:
+        raise ValueError("AlphaFold pLDDT threshold must be between 0 and 100.")
+    if af_confidence_only and align and not download_only and not include_alphafold:
+        raise ValueError("Confidence-filtered alignment requires AlphaFold. Enable AlphaFold or turn off the confidence filter.")
     _check_cancel(cancel)
     _report(progress, f"Resolving UniProt {query}...")
     entry = resolve_uniprot(query)
@@ -370,7 +399,7 @@ def _load_uniprot_structures(query, include_pdb=True, include_alphafold=True, al
     group_name = _safe_name(entry.entry_name) if download_only else _unique_object_name(_safe_name(entry.entry_name))
     cache_dir = cache_dir or os.path.join(tempfile.gettempdir(), "pymol_uniprot_structures", _safe_name(entry.entry_name))
     os.makedirs(cache_dir, exist_ok=True)
-    pdb_refs = [ref for ref in entry.pdb_refs if ref.pdb_id] if include_pdb else []
+    pdb_refs = [ref for ref in entry.pdb_refs if ref.pdb_id and _method_subgroup(ref.method) in methods] if include_pdb else []
     pdb_refs = list({ref.pdb_id: ref for ref in pdb_refs}.values())[:limit or None]
     _report(progress, f"{entry.entry_name} ({entry.accession}): {len(entry.pdb_refs)} PDB references found; {len(pdb_refs)} selected. Cache: {cache_dir}")
     af_url = None
@@ -391,13 +420,14 @@ def _load_uniprot_structures(query, include_pdb=True, include_alphafold=True, al
     completed = downloaded = cached = failed = 0
     loaded, visible, files = [], [], []
     reference = None
-    method_groups = {}
-    if not download_only:
+    reference_is_af = False
+    method_groups, method_counts = {}, {}
+    prefix = _safe_name(entry.entry_name.split("_", 1)[0])
+    if not download_only and jobs:
         cmd.group(group_name)
-        method_groups = _ensure_method_groups(group_name)
 
     def status(message):
-        _report(progress, f"{entry.entry_name}: {completed}/{total} processed ({completed / total:.0%}); "
+        _report(progress, f"{entry.entry_name}: {completed}/{total} processed ({completed / total if total else 1:.0%}); "
                 f"{total-completed} remaining; {downloaded} downloaded, {cached} cached, {failed} failed; "
                 f"{len(loaded)} loaded. {message}", completed, total)
 
@@ -441,20 +471,26 @@ def _load_uniprot_structures(query, include_pdb=True, include_alphafold=True, al
                     obj = _load_related_chains(path, f"AF_{_safe_name(entry.entry_name)}", [], group_name, activity)
                 else:
                     subgroup_label = _method_subgroup(ref.method)
-                    if subgroup_label not in method_groups:
-                        subgroup = _unique_object_name(subgroup_label)
-                        cmd.group(subgroup)
-                        cmd.group(group_name, subgroup)
-                        method_groups[subgroup_label] = subgroup
-                    obj = _load_related_chains(path, ref.pdb_id, ref.chains, method_groups[subgroup_label], activity)
+                    current = method_groups.get(subgroup_label)
+                    # Loading into the root first avoids leaving empty method groups on failure.
+                    obj = _load_related_chains(path, ref.pdb_id, ref.chains, group_name, activity)
+                    count = method_counts.get(subgroup_label, 0) + 1
+                    subgroup = _update_method_group(group_name, prefix, subgroup_label, current, count)
+                    cmd.group(subgroup, obj)
+                    method_groups[subgroup_label] = subgroup
+                    method_counts[subgroup_label] = count
                 loaded.append(obj)
                 _check_cancel(cancel)
+                if align and af_confidence_only and not is_af and not reference_is_af:
+                    raise ValueError("No AlphaFold reference is loaded; confidence-filtered alignment skipped. Structure retained hidden.")
                 if reference is None:
                     reference = obj
+                    reference_is_af = is_af
                     if not is_af and align:
                         _report(activity, f"AlphaFold unavailable/disabled; using first PDB {obj} as reference.")
                 elif align:
-                    _align_object(obj, reference, alignment_method, activity)
+                    _align_object(obj, reference, alignment_method, activity,
+                                  reference_b_min=af_plddt_min if af_confidence_only and reference_is_af else None)
                 _show_structure(obj)
                 visible.append(obj)
             except (Cancelled, MemoryError):
@@ -473,17 +509,20 @@ def _load_uniprot_structures(query, include_pdb=True, include_alphafold=True, al
     return {"accession": entry.accession, "entry_name": entry.entry_name, "group": group_name,
             "loaded": loaded, "visible": visible, "files": files, "cache_dir": cache_dir,
             "pdb_count": len(entry.pdb_refs), "downloaded": downloaded, "cached": cached,
-            "failed": failed, "errors": errors}
+            "failed": failed, "errors": errors, "method_groups": method_groups,
+            "method_counts": method_counts, "pdb_methods": sorted(methods)}
 
 
 def load_uniprot_structures(query, include_pdb=True, include_alphafold=True, align=True,
                             alignment_method="align", cache_dir=None, limit=0,
-                            download_only=False, progress=None, cancel=None):
+                            download_only=False, progress=None, cancel=None,
+                            pdb_methods=None, af_confidence_only=False, af_plddt_min=50.0):
     if not _RUN_LOCK.acquire(blocking=False):
         raise RuntimeError("A UniProt job is already running. Cancel it or wait for it to finish.")
     try:
         return _load_uniprot_structures(query, include_pdb, include_alphafold, align,
-                                        alignment_method, cache_dir, limit, download_only, progress, cancel)
+                                        alignment_method, cache_dir, limit, download_only, progress, cancel,
+                                        pdb_methods, af_confidence_only, af_plddt_min)
     finally:
         _RUN_LOCK.release()
 
@@ -523,17 +562,22 @@ def load_uniprot_batch(queries, cache_root=None, progress=None, cancel=None, **o
 
 
 def uniprot_structures(query, include_pdb="1", include_alphafold="1", align="1",
-                       alignment_method="align", limit="0", download_only="0", cache_dir=""):
+                       alignment_method="align", limit="0", download_only="0", cache_dir="",
+                       pdb_methods="all", af_confidence_only="0", af_plddt_min="50"):
     """Load one UniProt entry; trailing options preserve existing command syntax."""
     return load_uniprot_structures(query, bool(int(include_pdb)), bool(int(include_alphafold)),
                                    bool(int(align)), alignment_method, cache_dir or None, int(limit),
-                                   bool(int(download_only)))
+                                   bool(int(download_only)), pdb_methods=pdb_methods,
+                                   af_confidence_only=bool(int(af_confidence_only)), af_plddt_min=float(af_plddt_min))
 
 
-def uniprot_structures_file(filename, limit="0", download_only="0", cache_dir=""):
+def uniprot_structures_file(filename, limit="0", download_only="0", cache_dir="",
+                            pdb_methods="all", include_alphafold="1", af_confidence_only="0", af_plddt_min="50"):
     """Process a TXT/CSV/TSV UniProt list sequentially."""
     return load_uniprot_batch(read_uniprot_file(filename), cache_root=cache_dir or None,
-                              limit=int(limit), download_only=bool(int(download_only)))
+                              limit=int(limit), download_only=bool(int(download_only)), pdb_methods=pdb_methods,
+                              include_alphafold=bool(int(include_alphafold)),
+                              af_confidence_only=bool(int(af_confidence_only)), af_plddt_min=float(af_plddt_min))
 
 
 def list_uniprot_groups():
@@ -542,7 +586,8 @@ def list_uniprot_groups():
         return []
     return sorted(name for name in cmd.get_names("objects")
                   if cmd.get_type(name) == "object:group"
-                  and re.fullmatch(r"[A-Z0-9]+_[A-Z][A-Z0-9]*(?:_\d+)?", name))
+                  and re.fullmatch(r"[A-Z0-9]+_[A-Z][A-Z0-9]*(?:_\d+)?", name)
+                  and not re.search(r"_(?:NMR|EM|X-ray|Other_methods)_\d+(?:_\d+)?$", name))
 
 
 def uniprot_show(group, only="1"):
@@ -662,10 +707,35 @@ def _open_qt_gui():
     cache_button.clicked.connect(browse_cache)
     pdb_check = QtWidgets.QCheckBox("Download PDB structures", dialog)
     pdb_check.setChecked(True)
+    category_checks = {}
+    for label in ("NMR", "X-ray", "EM", "Other_methods"):
+        checkbox = QtWidgets.QCheckBox(label.replace("_methods", ""), dialog)
+        checkbox.setObjectName("category_" + label)
+        checkbox.setChecked(True)
+        category_checks[label] = checkbox
     af_check = QtWidgets.QCheckBox("Download AlphaFold model", dialog)
     af_check.setChecked(True)
     align_check = QtWidgets.QCheckBox("Align structures (AlphaFold reference when available)", dialog)
     align_check.setChecked(True)
+    confidence_check = QtWidgets.QCheckBox("Fit only to AlphaFold regions with pLDDT (B-factor) >", dialog)
+    confidence_check.setObjectName("af_confidence_only")
+    confidence_spin = QtWidgets.QDoubleSpinBox(dialog)
+    confidence_spin.setObjectName("af_plddt_min")
+    confidence_spin.setRange(0, 100)
+    confidence_spin.setValue(50)
+    confidence_spin.setEnabled(False)
+    confidence_check.toggled.connect(confidence_spin.setEnabled)
+    def update_source_controls():
+        for check in category_checks.values():
+            check.setEnabled(pdb_check.isChecked())
+        eligible = af_check.isChecked() and align_check.isChecked()
+        if not eligible:
+            confidence_check.setChecked(False)
+        confidence_check.setEnabled(eligible)
+        confidence_spin.setEnabled(eligible and confidence_check.isChecked())
+    pdb_check.toggled.connect(update_source_controls)
+    af_check.toggled.connect(update_source_controls)
+    align_check.toggled.connect(update_source_controls)
     download_check = QtWidgets.QCheckBox("Download only: save files without loading into PyMOL", dialog)
     method_combo = QtWidgets.QComboBox(dialog)
     method_combo.addItems(["align", "super", "cealign"])
@@ -687,8 +757,17 @@ def _open_qt_gui():
         row.addWidget(edit)
         row.addWidget(button)
         form.addRow(title, row)
-    for widget in (pdb_check, af_check, align_check, download_check):
+    form.addRow("", pdb_check)
+    category_row = QtWidgets.QHBoxLayout()
+    for check in category_checks.values():
+        category_row.addWidget(check)
+    form.addRow("PDB categories", category_row)
+    for widget in (af_check, align_check, download_check):
         form.addRow("", widget)
+    confidence_row = QtWidgets.QHBoxLayout()
+    confidence_row.addWidget(confidence_check)
+    confidence_row.addWidget(confidence_spin)
+    form.addRow("", confidence_row)
     form.addRow("Alignment", method_combo)
     form.addRow("PDB limit per protein", limit_spin)
     form.addRow("", QtWidgets.QLabel("Keeps one mapped protein chain: A if available, otherwise the first mapped chain.", dialog))
@@ -697,7 +776,8 @@ def _open_qt_gui():
     cancel_button.setEnabled(False)
     close_button = QtWidgets.QPushButton("Close", dialog)
     controls = [query_edit, file_edit, file_button, cache_edit, cache_button, pdb_check,
-                af_check, align_check, download_check, method_combo, limit_spin, load_button, close_button]
+                af_check, align_check, download_check, method_combo, limit_spin, load_button, close_button,
+                confidence_check, confidence_spin] + list(category_checks.values())
     viewer = QtWidgets.QGroupBox("View loaded proteins (no download needed)", dialog)
     viewer_layout = QtWidgets.QHBoxLayout(viewer)
     protein_combo = QtWidgets.QComboBox(viewer)
@@ -737,6 +817,8 @@ def _open_qt_gui():
         for control in controls:
             control.setEnabled(not value)
         cancel_button.setEnabled(value)
+        if not value:
+            update_source_controls()
     def cancel_job():
         if busy():
             job["cancel"].set()
@@ -781,12 +863,14 @@ def _open_qt_gui():
             queries = read_uniprot_file(file_edit.text().strip()) if file_edit.text().strip() else parse_uniprot_queries(query_edit.text())
             if not any(queries):
                 raise ValueError("Enter a UniProt accession/name or browse to a list file.")
-            if not pdb_check.isChecked() and not af_check.isChecked():
-                raise ValueError("Select PDB structures, AlphaFold, or both.")
+            selected_methods = [label for label, check in category_checks.items() if check.isChecked()]
+            if not (pdb_check.isChecked() and selected_methods) and not af_check.isChecked():
+                raise ValueError("Select at least one PDB category or AlphaFold.")
             options = dict(include_pdb=pdb_check.isChecked(), include_alphafold=af_check.isChecked(),
                            align=align_check.isChecked(), alignment_method=method_combo.currentText(),
                            limit=limit_spin.value(), download_only=download_check.isChecked(),
-                           cache_root=cache_edit.text().strip() or None)
+                           cache_root=cache_edit.text().strip() or None, pdb_methods=selected_methods,
+                           af_confidence_only=confidence_check.isChecked(), af_plddt_min=confidence_spin.value())
             set_running(True)
             log.clear()
             bar.setRange(0, 0)
@@ -841,6 +925,9 @@ def _open_gui(*_args, **_kwargs):
     method = tk.StringVar(value="align")
     limit = tk.StringVar(value="0")
     status = tk.StringVar(value="Ready")
+    categories = {label: tk.BooleanVar(value=True) for label in ("NMR", "X-ray", "EM", "Other_methods")}
+    confidence = tk.BooleanVar(value=False)
+    threshold = tk.StringVar(value="50")
     controls = []
     for row, (label, value) in enumerate((("UniProt entries", query), ("List file (takes priority)", filename), ("Download folder", cache))):
         ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w")
@@ -864,6 +951,21 @@ def _open_gui(*_args, **_kwargs):
         widget = ttk.Checkbutton(frame, text=label, variable=value)
         widget.grid(row=row, column=0, columnspan=3, sticky="w")
         controls.append(widget)
+    category_frame = ttk.Frame(frame)
+    category_frame.grid(row=13, column=0, columnspan=3, sticky="w")
+    ttk.Label(category_frame, text="PDB categories:").pack(side="left")
+    for label, variable in categories.items():
+        checkbox = ttk.Checkbutton(category_frame, text=label.replace("_methods", ""), variable=variable)
+        checkbox.pack(side="left")
+        controls.append(checkbox)
+    confidence_frame = ttk.Frame(frame)
+    confidence_frame.grid(row=14, column=0, columnspan=3, sticky="w")
+    checkbox = ttk.Checkbutton(confidence_frame, text="Fit only to AlphaFold pLDDT (B-factor) >", variable=confidence)
+    checkbox.pack(side="left")
+    controls.append(checkbox)
+    threshold_edit = ttk.Entry(confidence_frame, textvariable=threshold, width=6)
+    threshold_edit.pack(side="left")
+    controls.append(threshold_edit)
     ttk.Label(frame, text="PDB limit per protein (0 = all)").grid(row=7, column=0)
     widget = ttk.Entry(frame, textvariable=limit, width=10)
     widget.grid(row=7, column=1, sticky="w")
@@ -920,9 +1022,15 @@ def _open_gui(*_args, **_kwargs):
             n = int(limit.get() or "0")
             if n < 0 or not any(queries) or not (pdb.get() or af.get()):
                 raise ValueError("Choose UniProt input, at least one structure source, and a nonnegative limit.")
+            selected_methods = [label for label, variable in categories.items() if variable.get()]
+            if not (pdb.get() and selected_methods) and not af.get():
+                raise ValueError("Select at least one experimental category or AlphaFold.")
+            if confidence.get() and align.get() and not download_only.get() and not af.get():
+                raise ValueError("Confidence-filtered alignment requires AlphaFold.")
             options = dict(include_pdb=pdb.get(), include_alphafold=af.get(), align=align.get(),
                            download_only=download_only.get(), alignment_method=method.get(), limit=n,
-                           cache_root=cache.get().strip() or None)
+                           cache_root=cache.get().strip() or None, pdb_methods=selected_methods,
+                           af_confidence_only=confidence.get(), af_plddt_min=float(threshold.get()))
             set_running(True)
             job["started"] = time.monotonic()
             job["message"] = "Starting..."

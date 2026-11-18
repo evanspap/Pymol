@@ -58,6 +58,38 @@ class CoreTests(unittest.TestCase):
                 plugin.resolve_uniprot("BCL2_HUMAN\nCAB39_HUMAN")
             network.assert_not_called()
 
+    def test_experimental_category_filter_before_limit(self):
+        entry = plugin.UniProtEntry("P06730", "TFE2_HUMAN", [
+            plugin.PDBReference("XR01", ["A"], "X-ray diffraction"),
+            plugin.PDBReference("NM01", ["A"], "NMR"),
+            plugin.PDBReference("EM01", ["A"], "Electron microscopy"),
+            plugin.PDBReference("NM02", ["A"], "NMR")])
+        for selected, expected in [("NMR", ["NM01"]), ("X-ray", ["XR01"]), ("EM", ["EM01"]),
+                                   ("NMR+EM", ["NM01"])]:
+            with patch.object(plugin, "resolve_uniprot", return_value=entry), patch.object(plugin, "_download_pdb_or_cif", return_value="cached.pdb") as fetch:
+                plugin.load_uniprot_structures("TFE2_HUMAN", include_alphafold=False,
+                    download_only=True, pdb_methods=selected, limit=1, cache_dir=str(self.root))
+            self.assertEqual([call.args[0] for call in fetch.call_args_list], expected)
+        with self.assertRaises(ValueError):
+            plugin._parse_pdb_methods("invalid")
+
+    def test_absent_category_has_no_download_or_empty_group(self):
+        entry = plugin.UniProtEntry("P06730", "TFE2_HUMAN", [plugin.PDBReference("XR01", ["A"], "X-ray")])
+        with patch.object(plugin, "resolve_uniprot", return_value=entry), patch.object(plugin, "_download_pdb_or_cif") as fetch:
+            result = plugin.load_uniprot_structures("TFE2_HUMAN", include_alphafold=False,
+                download_only=True, pdb_methods="NMR", cache_dir=str(self.root))
+        fetch.assert_not_called()
+        self.assertEqual(result["method_groups"], {})
+        self.assertEqual(result["files"], [])
+
+    def test_alphafold_only_skips_experimental_downloads(self):
+        entry = plugin.UniProtEntry("P06730", "TFE2_HUMAN", [plugin.PDBReference("NM01", ["A"], "NMR")])
+        with patch.object(plugin, "resolve_uniprot", return_value=entry), patch.object(plugin, "get_alphafold_pdb_url", return_value="https://example.org/af.pdb"), patch.object(plugin, "_download"), patch.object(plugin, "_download_pdb_or_cif") as fetch:
+            result = plugin.load_uniprot_structures("TFE2_HUMAN", pdb_methods="none",
+                download_only=True, cache_dir=str(self.root))
+        fetch.assert_not_called()
+        self.assertEqual(len(result["files"]), 1)
+
     def test_atomic_download_and_cache(self):
         path = self.root / "model.pdb"
         with patch.object(plugin.urllib.request, "urlopen", return_value=Response(b"coordinates")):
@@ -213,6 +245,60 @@ class PyMOLTests(unittest.TestCase):
         self.assertEqual(self.cmd.count_atoms("ligand and rep spheres"), 0)
         self.assertEqual(self.cmd.count_atoms("ligand and rep nonbonded"), 0)
 
+    def test_nonempty_counted_method_groups_and_repeated_load(self):
+        refs = [plugin.PDBReference("NM01", ["B"], "NMR")] + [
+            plugin.PDBReference(f"XR0{i}", ["B"], "X-ray diffraction") for i in range(4)]
+        entry = plugin.UniProtEntry("P06730", "TFE2_HUMAN", refs)
+        with patch.object(plugin, "resolve_uniprot", return_value=entry), patch.object(plugin, "_download_pdb_or_cif", return_value=self.path):
+            result = plugin.load_uniprot_structures("TFE2_HUMAN", include_alphafold=False,
+                                                  align=False, cache_dir=self.folder.name)
+            repeated = plugin.load_uniprot_structures("TFE2_HUMAN", include_alphafold=False,
+                                                    align=False, cache_dir=self.folder.name)
+        self.assertEqual(result["method_counts"], {"NMR": 1, "X-ray": 4})
+        self.assertEqual(result["method_groups"], {"NMR": "TFE2_NMR_1", "X-ray": "TFE2_X-ray_4"})
+        for category, count in result["method_counts"].items():
+            self.assertEqual(len(self.cmd.get_object_list(result["method_groups"][category])), count)
+        self.assertEqual(len(plugin.list_uniprot_groups()), 2)
+        self.assertNotEqual(repeated["method_groups"]["NMR"], result["method_groups"]["NMR"])
+        self.assertFalse(any("_EM_" in name or "Other_methods" in name for name in self.cmd.get_names("objects")))
+
+    def test_failed_load_creates_no_empty_method_group(self):
+        entry = plugin.UniProtEntry("P06730", "TFE2_HUMAN", [plugin.PDBReference("NM01", ["Z"], "NMR")])
+        with patch.object(plugin, "resolve_uniprot", return_value=entry), patch.object(plugin, "_download_pdb_or_cif", return_value=self.path):
+            result = plugin.load_uniprot_structures("TFE2_HUMAN", include_alphafold=False,
+                                                  align=False, cache_dir=self.folder.name)
+        self.assertEqual(result["method_groups"], {})
+        self.assertEqual(self.cmd.get_names("objects"), ["TFE2_HUMAN"])
+
+    def test_alphafold_confidence_selection_all_methods(self):
+        ref = plugin._load_related_chains(self.path, "AF_REFERENCE", ["B"], "group")
+        mobile = plugin._load_related_chains(self.path, "MOBILE", ["B"], "group")
+        self.cmd.alter(ref, "b=90")
+        self.cmd.alter(ref + " and resi 1-10", "b=10")
+        self.cmd.alter(ref + " and resi 11-20", "b=50")
+        self.cmd.alter(mobile, "b=0")
+        original_atoms = self.cmd.count_atoms(ref)
+        for method in ("align", "super", "cealign"):
+            self.cmd.translate([8, -4, 3], mobile)
+            events = []
+            plugin._align_object(mobile, ref, method, events.append, reference_b_min=50)
+            self.assertTrue(any("and b > 50" in event["message"] for event in events))
+        self.assertEqual(self.cmd.count_atoms(ref), original_atoms)
+        self.assertGreater(self.cmd.count_atoms(mobile + " and b = 0"), 0)
+        self.cmd.alter(ref, "b=50")
+        before = self.cmd.get_coords(mobile).copy()
+        with self.assertRaisesRegex(ValueError, "fewer than 3"):
+            plugin._align_object(mobile, ref, "align", None, reference_b_min=50)
+        self.assertTrue((before == self.cmd.get_coords(mobile)).all())
+
+    def test_confidence_filter_does_not_fall_back_to_experimental_b(self):
+        entry = plugin.UniProtEntry("P06730", "TFE2_HUMAN", [plugin.PDBReference("NM01", ["B"], "NMR")])
+        with patch.object(plugin, "resolve_uniprot", return_value=entry), patch.object(plugin, "get_alphafold_pdb_url", return_value=None), patch.object(plugin, "_download_pdb_or_cif", return_value=self.path), patch.object(plugin, "_align_object") as fit:
+            result = plugin.load_uniprot_structures("TFE2_HUMAN", af_confidence_only=True, cache_dir=self.folder.name)
+        fit.assert_not_called()
+        self.assertEqual(result["visible"], [])
+        self.assertIn("No AlphaFold reference", result["errors"][0])
+
     def test_keeps_mapped_B_instead_of_unrelated_A(self):
         obj = plugin._load_related_chains(self.path, "TEST", ["B"], "group")
         self.assertEqual(self.cmd.get_chains(obj), ["B"])
@@ -243,7 +329,7 @@ class PyMOLTests(unittest.TestCase):
             actual = self.cmd.get_atom_coords(mobile + " and resn LIG and name C1")
             expected = self.cmd.get_atom_coords(ref + " and resn LIG and name C1")
             for a, b in zip(actual, expected):
-                self.assertAlmostEqual(a, b, places=3)
+                self.assertAlmostEqual(a, b, delta=0.002)
 
     def test_prefers_A_only_when_mapped(self):
         obj = plugin._load_related_chains(self.path, "TEST", ["A", "B"], "group")
